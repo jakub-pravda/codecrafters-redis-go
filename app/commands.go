@@ -1,15 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 )
 
 type Command struct {
-	commandValue string
+	commandType   string
+	commandValues []string
 }
 
 type CommandResponse struct {
-	responseType string
+	responseType    string
 	responseContent string
 }
 
@@ -22,21 +24,16 @@ func handleCommandPing() CommandResponse {
 	return CommandResponse{"+", "PONG"}
 }
 
-func parseCommnads(unparsedRequest string) []Command {
-	commands := []Command{
-		Command{
-			commandValue: "PING",
-		},
-	}
-	return commands
-}
-
-func processCommand(command Command) *CommandResponse {
-	switch command.commandValue {
-		case "PING":
-			pingResponse := handleCommandPing()
-			return &pingResponse
-		default:
-			return nil
+func processCommand(command *Command) (CommandResponse, error) {
+	switch command.commandType {
+	case "PING":
+		pingResponse := handleCommandPing()
+		return pingResponse, nil
+	default:
+		emptyResponse := CommandResponse{
+			responseType:    "",
+			responseContent: "",
+		}
+		return emptyResponse, errors.New("Invalid command")
 	}
 }

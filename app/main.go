@@ -16,13 +16,13 @@ func main() {
 	log("Logs from your program will appear here!")
 
 	// Init event loop
-	eventLoop := CommandEventLoop {
-		mainTask: make(chan Task, 10),
+	eventLoop := CommandEventLoop{
+		mainTask:     make(chan Task, 10),
 		commandQueue: make(chan Task, 10),
-		stop: make(chan bool),
+		stop:         make(chan bool),
 	}
 	wg := InitEventLoop(&eventLoop, 10)
-	
+
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		log("Failed to bind to port 6379")
@@ -34,35 +34,31 @@ func main() {
 		StopEventLoop(&eventLoop)
 		wg.Wait()
 	}()
-	
+
 	for {
 		con, err := l.Accept()
 		log("Opening new connection")
 		if err != nil {
-			log(fmt.Sprintf("Error connection accept: ", err.Error()))
+			log(fmt.Sprintf("Error connection accept: %s", err.Error()))
 		}
-		// run connectiuon handler in separate goroutine
+		// run connection handler in separate goroutine
 		go handleConnection(con, &eventLoop)
 	}
 }
 
-func handleCommandRequest(requestCommands []byte) []CommandResponse {
-	commands := parseCommnads(string(requestCommands))
-	commandResponses := make([]CommandResponse, 0, len(commands))
-	for _, command := range commands {
-		log(fmt.Sprintf("Command: %s", command))
-		commandResponse := processCommand(command)
-		log(fmt.Sprintf("Command %s result: %s", command.commandValue, commandResponse.responseContent))
-		if commandResponse != nil {
-			commandResponses = append(commandResponses, *commandResponse)
-		}
-	}
-	return commandResponses
+func handleCommandRequest(requestCommands []byte) CommandResponse {
+	command, _ := parseCommand(requestCommands) // TODO err handling
+
+	log(fmt.Sprintf("Command: %s", command))
+	commandResponse, _ := processCommand(command) // TODO error handling
+	log(fmt.Sprintf("Command %s result: %s", command.commandType, commandResponse.responseContent))
+
+	return commandResponse
 }
 
 func handleConnection(conn net.Conn, eventLoop *CommandEventLoop) {
 	defer conn.Close()
-	
+
 	for {
 		buf := make([]byte, 1024)
 		n, readErr := conn.Read(buf)
@@ -71,25 +67,26 @@ func handleConnection(conn net.Conn, eventLoop *CommandEventLoop) {
 				log("EOF detected. Closing connection")
 				break
 			} else {
-				log(fmt.Sprintf("Error reading client: ", readErr.Error()))
+				log(fmt.Sprintf("Error reading client: %s", readErr.Error()))
 				break
 			}
 		}
-		
-		log(fmt.Sprintf("Recieved data: ", buf[:n]))
-		log(fmt.Sprintf("Recieved data (str): ", string(buf[:n])))
-		
+
+		command := buf[:n]
+
+		log(fmt.Sprintf("Recieved data: %s", command))
+		log(fmt.Sprintf("Recieved data (str): %s", string(command)))
+
 		Add(eventLoop, &Task{
+			// TODO split command processing and client write
 			MainTask: func() {
-				commandResults := handleCommandRequest(buf)
-				for _, commandResult := range commandResults {
-					responseString := commandResponseToString(commandResult)
-					log(fmt.Sprintf("Sending response: ", responseString))
-					_, writeErr := conn.Write([]byte(responseString))
-					if writeErr != nil {
-						log(fmt.Sprintf("Error writing client: ", writeErr.Error()))
-					}
-				}	
+				commandResult := handleCommandRequest(command)
+				responseString := commandResponseToString(commandResult)
+				log(fmt.Sprintf("Sending response: %s", responseString))
+				_, writeErr := conn.Write([]byte(responseString))
+				if writeErr != nil {
+					log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
+				}
 			},
 			IsBlocking: true,
 		})

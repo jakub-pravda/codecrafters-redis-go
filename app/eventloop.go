@@ -3,15 +3,15 @@ package main
 import "sync"
 
 type Task struct {
-	MainTask func() // main taks to execute
-	Callback func() // optional callback function
-	IsBlocking bool // flag to determine if a task is blocking or not
+	MainTask   func() // main taks to execute
+	Callback   func() // optional callback function
+	IsBlocking bool   // flag to determine if a task is blocking or not
 }
 
 type CommandEventLoop struct {
-	mainTask chan Task // channel to hold commands to be processed
+	mainTask     chan Task // channel to hold commands to be processed
 	commandQueue chan Task // channel to hold calback tasks
-	stop chan bool // channel to inidicate the event loop to stop	
+	stop         chan bool // channel to inidicate the event loop to stop
 }
 
 func Add(eventLoop *CommandEventLoop, task *Task) {
@@ -30,23 +30,23 @@ func StopEventLoop(eventLoop *CommandEventLoop) {
 
 func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGroup {
 	wg := sync.WaitGroup{}
-	
+
 	// add event loop goroutine to the wait group
 	wg.Add(1)
 	workerPool := make(chan struct{}, workerPoolSize)
-	
+
 	// start the event loop
 	go func() {
 		defer wg.Done() // wait until event loop is finished
-		
+
 		for {
 			select {
-				case task := <-eventLoop.mainTask:
+			case task := <-eventLoop.mainTask:
 				if task.IsBlocking {
 					// append blocking tasks to worker pool
 					workerPool <- struct{}{} // acquire a worker
-				
-				 	// execute blocking task in separate go routine
+
+					// execute blocking task in separate go routine
 					go func() {
 						defer func() {
 							<-workerPool // release the worker back to the pool
@@ -63,10 +63,10 @@ func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGr
 					// handle non blocking tasks
 					task.MainTask()
 				}
-				case task := <- eventLoop.commandQueue:
+			case task := <-eventLoop.commandQueue:
 				// ececute callback task
 				task.MainTask()
-				case stop := <- eventLoop.stop:
+			case stop := <-eventLoop.stop:
 				if stop {
 					return
 				}
