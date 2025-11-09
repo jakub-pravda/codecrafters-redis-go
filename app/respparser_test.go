@@ -1,9 +1,11 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
-func TestParseBulkStrings(t *testing.T) {
-	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
+func TestDecodeBulkStrings(t *testing.T) {
 	var tests = []struct {
 		name  string
 		input []byte
@@ -23,7 +25,7 @@ func TestParseBulkStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ans, err := parseBulkString(tt.input)
+			ans, err := decodeBulkString(tt.input)
 			if err != nil {
 				t.Errorf("result expected, but err got: %s", err.Error())
 			}
@@ -35,8 +37,35 @@ func TestParseBulkStrings(t *testing.T) {
 	}
 }
 
+func TestEncodeBulkStrings(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input RespContent
+		want  []byte
+	}{
+		{
+			name:  "Empty bulk string should be parsed",
+			input: RespContent{value: "", dataType: BulkString},
+			want:  []byte("$0\r\n\r\n"),
+		},
+		{
+			name:  "Bulk string should be parsed",
+			input: RespContent{value: "hello", dataType: BulkString},
+			want:  []byte("$5\r\nhello\r\n"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ans := encodeBulkString(tt.input)
+			if !bytes.Equal(ans, tt.want) {
+				t.Errorf("got %v, want %v", ans, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseArray(t *testing.T) {
-	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
 	var tests = []struct {
 		name  string
 		input []byte

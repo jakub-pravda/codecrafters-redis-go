@@ -51,7 +51,7 @@ func handleCommandRequest(requestCommands []byte) CommandResponse {
 
 	log(fmt.Sprintf("Command: %s", command))
 	commandResponse, _ := processCommand(command) // TODO error handling
-	log(fmt.Sprintf("Command %s result: %s", command.commandType, commandResponse.responseContent))
+	log(fmt.Sprintf("Command %s result: %s", command.commandType, commandResponse.value))
 
 	return commandResponse
 }
@@ -81,9 +81,8 @@ func handleConnection(conn net.Conn, eventLoop *CommandEventLoop) {
 			// TODO split command processing and client write
 			MainTask: func() {
 				commandResult := handleCommandRequest(command)
-				responseString := commandResponseToString(commandResult)
-				log(fmt.Sprintf("Sending response: %s", responseString))
-				_, writeErr := conn.Write([]byte(responseString))
+				log(fmt.Sprintf("Sending response: %s", commandResult.value))
+				_, writeErr := conn.Write(commandResult.value)
 				if writeErr != nil {
 					log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
 				}

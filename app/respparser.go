@@ -92,7 +92,7 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 		log(fmt.Sprintf("(Array parser) next element: %s", next))
 		if next[0] == BulkString {
 			// bulk string, get next element and process
-			bulkString, err := parseBulkString(next)
+			bulkString, err := decodeBulkString(next)
 			if err != nil {
 				return nil, errors.New(fmt.Sprintf("Can't parse bulk string: %s", err.Error()))
 			}
@@ -111,7 +111,29 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 	}
 }
 
-func parseBulkString(bulkString []byte) (*RespContent, error) {
+func encodeBulkString(content RespContent) []byte {
+	if content.dataType != BulkString {
+		return nil
+	}
+
+	lenBytes := []byte(strconv.Itoa(len(content.value)))
+	stringSize := append([]byte{BulkString}, lenBytes...)
+
+	stringContent := []byte(content.value)
+	sep := []byte(respSeparator)
+
+	totalLen := len(stringSize) + len(sep) + len(stringContent) + len(sep)
+	result := make([]byte, 0, totalLen)
+
+	result = append(result, stringSize...)
+	result = append(result, sep...)
+	result = append(result, stringContent...)
+	result = append(result, sep...)
+
+	return result
+}
+
+func decodeBulkString(bulkString []byte) (*RespContent, error) {
 	log(fmt.Sprintf("(Bulk parser) input: %v", bulkString))
 	if bulkString[0] != byte(BulkString) {
 		return nil, errors.New("Not a bulk string")

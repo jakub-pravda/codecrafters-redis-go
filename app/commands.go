@@ -1,8 +1,7 @@
 package main
 
 import (
-	"errors"
-	"fmt"
+	"strings"
 )
 
 type Command struct {
@@ -11,29 +10,35 @@ type Command struct {
 }
 
 type CommandResponse struct {
-	responseType    string
-	responseContent string
-}
-
-func commandResponseToString(response CommandResponse) string {
-	responseString := fmt.Sprintf("+%s\r\n", response.responseContent)
-	return responseString
+	value []byte
 }
 
 func handleCommandPing() CommandResponse {
-	return CommandResponse{"+", "PONG"}
+	response := "+PONG\r\n" // TODO encode simple string!
+	return CommandResponse{[]byte(response)}
+}
+
+func handleEcho(command *Command) CommandResponse {
+	echoResponse := strings.Join(command.commandValues, " ")
+	resp := RespContent{
+		value:    echoResponse,
+		dataType: BulkString,
+	}
+	encoded := encodeBulkString(resp)
+	return CommandResponse{encoded}
 }
 
 func processCommand(command *Command) (CommandResponse, error) {
-	switch command.commandType {
+	switch strings.ToUpper(command.commandType) {
 	case "PING":
 		pingResponse := handleCommandPing()
 		return pingResponse, nil
+	case "ECHO":
+		echoResponse := handleEcho(command)
+		return echoResponse, nil
 	default:
-		emptyResponse := CommandResponse{
-			responseType:    "",
-			responseContent: "",
-		}
-		return emptyResponse, errors.New("Invalid command")
+		// ping for now
+		pingResponse := handleCommandPing()
+		return pingResponse, nil
 	}
 }
