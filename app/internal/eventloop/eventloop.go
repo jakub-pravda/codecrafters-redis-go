@@ -1,4 +1,4 @@
-package main
+package eventloop
 
 import "sync"
 
@@ -9,23 +9,23 @@ type Task struct {
 }
 
 type CommandEventLoop struct {
-	mainTask     chan Task // channel to hold commands to be processed
-	commandQueue chan Task // channel to hold calback tasks
-	stop         chan bool // channel to inidicate the event loop to stop
+	MainTask     chan Task // channel to hold commands to be processed
+	CommandQueue chan Task // channel to hold calback tasks
+	Stop         chan bool // channel to inidicate the event loop to stop
 }
 
 func Add(eventLoop *CommandEventLoop, task *Task) {
 	// push task to command channel
-	eventLoop.mainTask <- *task
+	eventLoop.MainTask <- *task
 }
 
 func AddToTaskQueue(eventLoop *CommandEventLoop, task *Task) {
 	// push task to command queue
-	eventLoop.commandQueue <- *task
+	eventLoop.CommandQueue <- *task
 }
 
 func StopEventLoop(eventLoop *CommandEventLoop) {
-	eventLoop.stop <- true
+	eventLoop.Stop <- true
 }
 
 func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGroup {
@@ -41,7 +41,7 @@ func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGr
 
 		for {
 			select {
-			case task := <-eventLoop.mainTask:
+			case task := <-eventLoop.MainTask:
 				if task.IsBlocking {
 					// append blocking tasks to worker pool
 					workerPool <- struct{}{} // acquire a worker
@@ -63,10 +63,10 @@ func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGr
 					// handle non blocking tasks
 					task.MainTask()
 				}
-			case task := <-eventLoop.commandQueue:
+			case task := <-eventLoop.CommandQueue:
 				// ececute callback task
 				task.MainTask()
-			case stop := <-eventLoop.stop:
+			case stop := <-eventLoop.Stop:
 				if stop {
 					return
 				}

@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/command"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/eventloop"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 	"io"
 	"net"
 	"os"
@@ -13,50 +16,50 @@ var _ = os.Exit
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	log("Logs from your program will appear here!")
+	utils.Log("Logs from your program will appear here!")
 
 	// Init event loop
-	eventLoop := CommandEventLoop{
-		mainTask:     make(chan Task, 10),
-		commandQueue: make(chan Task, 10),
-		stop:         make(chan bool),
+	eventLoop := eventloop.CommandEventLoop{
+		MainTask:     make(chan eventloop.Task, 10),
+		CommandQueue: make(chan eventloop.Task, 10),
+		Stop:         make(chan bool),
 	}
-	wg := InitEventLoop(&eventLoop, 10)
+	wg := eventloop.InitEventLoop(&eventLoop, 10)
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
-		log("Failed to bind to port 6379")
+		utils.Log("Failed to bind to port 6379")
 		os.Exit(1)
 	}
 
 	defer func() {
 		l.Close()
-		StopEventLoop(&eventLoop)
+		eventloop.StopEventLoop(&eventLoop)
 		wg.Wait()
 	}()
 
 	for {
 		con, err := l.Accept()
-		log("Opening new connection")
+		utils.Log("Opening new connection")
 		if err != nil {
-			log(fmt.Sprintf("Error connection accept: %s", err.Error()))
+			utils.Log(fmt.Sprintf("Error connection accept: %s", err.Error()))
 		}
 		// run connection handler in separate goroutine
 		go handleConnection(con, &eventLoop)
 	}
 }
 
-func handleCommandRequest(requestCommands []byte) CommandResponse {
-	command, _ := parseCommand(requestCommands) // TODO err handling
+func handleCommandRequest(requestCommands []byte) command.CommandResponse {
+	cmd, _ := command.ParseCommand(requestCommands) // TODO err handling
 
-	log(fmt.Sprintf("Command: %s", command))
-	commandResponse, _ := processCommand(command) // TODO error handling
-	log(fmt.Sprintf("Command %s result: %s", command.commandType, commandResponse.value))
+	utils.Log(fmt.Sprintf("Command: %s", cmd))
+	cmdResponse, _ := command.ProcessCommand(cmd) // TODO error handling
+	utils.Log(fmt.Sprintf("Command %s result: %s", cmd.CommandType, cmdResponse.Value))
 
-	return commandResponse
+	return cmdResponse
 }
 
-func handleConnection(conn net.Conn, eventLoop *CommandEventLoop) {
+func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 	defer conn.Close()
 
 	for {
@@ -64,27 +67,27 @@ func handleConnection(conn net.Conn, eventLoop *CommandEventLoop) {
 		n, readErr := conn.Read(buf)
 		if readErr != nil {
 			if readErr == io.EOF {
-				log("EOF detected. Closing connection")
+				utils.Log("EOF detected. Closing connection")
 				break
 			} else {
-				log(fmt.Sprintf("Error reading client: %s", readErr.Error()))
+				utils.Log(fmt.Sprintf("Error reading client: %s", readErr.Error()))
 				break
 			}
 		}
 
 		command := buf[:n]
 
-		log(fmt.Sprintf("Recieved data: %s", command))
-		log(fmt.Sprintf("Recieved data (str): %s", string(command)))
+		utils.Log(fmt.Sprintf("Recieved data: %s", command))
+		utils.Log(fmt.Sprintf("Recieved data (str): %s", string(command)))
 
-		Add(eventLoop, &Task{
+		eventloop.Add(eventLoop, &eventloop.Task{
 			// TODO split command processing and client write
 			MainTask: func() {
-				commandResult := handleCommandRequest(command)
-				log(fmt.Sprintf("Sending response: %s", commandResult.value))
-				_, writeErr := conn.Write(commandResult.value)
+				cmdResult := handleCommandRequest(command)
+				utils.Log(fmt.Sprintf("Sending response: %s", cmdResult.Value))
+				_, writeErr := conn.Write(cmdResult.Value)
 				if writeErr != nil {
-					log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
+					utils.Log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
 				}
 			},
 			IsBlocking: true,

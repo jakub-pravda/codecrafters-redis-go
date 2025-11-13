@@ -1,9 +1,10 @@
-package main
+package respparser
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,8 +17,8 @@ const (
 )
 
 type RespContent struct {
-	value    string
-	dataType byte
+	Value    string
+	DataType byte
 }
 
 const respSeparator = "\r\n"
@@ -35,19 +36,19 @@ func isDataTypeDefinition(respContent []byte) bool {
 }
 
 func nextDataContent(respContent []byte) ([]byte, []byte) {
-	log(fmt.Sprintf("(Data content iterator) input: %v", respContent))
+	utils.Log(fmt.Sprintf("(Data content iterator) input: %v", respContent))
 	if len(respContent) == 0 {
 		return nil, nil
 	}
 
 	// get separators index
 	separatorIndex := strings.Index(string(respContent), respSeparator) + len(respSeparator)
-	log(fmt.Sprintf("(Data content iterator) Separator index: %d", separatorIndex))
+	utils.Log(fmt.Sprintf("(Data content iterator) Separator index: %d", separatorIndex))
 
 	next := respContent[:separatorIndex]
-	log(fmt.Sprintf("(Data content iterator) next: %s", next))
+	utils.Log(fmt.Sprintf("(Data content iterator) next: %s", next))
 	tail := respContent[separatorIndex:]
-	log(fmt.Sprintf("(Data content iterator) tail: %s", tail))
+	utils.Log(fmt.Sprintf("(Data content iterator) tail: %s", tail))
 
 	// check if next element is data type or data content
 	isTailDataType := isDataTypeDefinition(tail)
@@ -81,7 +82,7 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 
 	numOfElements, err := parseArrayContent(arrayId)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error occurs during array parsing: %s", err.Error()))
+		return nil, fmt.Errorf("Error occurs during array parsing: %s", err.Error())
 	}
 
 	respContent := make([]RespContent, 0)
@@ -89,14 +90,14 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 	nextIter := arrayData
 	for len(nextIter) > 0 {
 		next, tail := nextDataContent(nextIter)
-		log(fmt.Sprintf("(Array parser) next element: %s", next))
+		utils.Log(fmt.Sprintf("(Array parser) next element: %s", next))
 		if next[0] == BulkString {
 			// bulk string, get next element and process
 			bulkString, err := decodeBulkString(next)
 			if err != nil {
-				return nil, errors.New(fmt.Sprintf("Can't parse bulk string: %s", err.Error()))
+				return nil, fmt.Errorf("Can't parse bulk string: %s", err.Error())
 			}
-			log(fmt.Sprintf("Appending resp content (bulk string): %v", *bulkString))
+			utils.Log(fmt.Sprintf("Appending resp content (bulk string): %v", *bulkString))
 			respContent = append(respContent, *bulkString)
 			nextIter = tail
 		} else {
@@ -105,21 +106,21 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 	}
 
 	if numOfElements != len(respContent) {
-		return nil, errors.New(fmt.Sprintf("Parse resp content has different length (%d) than expected (%d)", numOfElements, len(respContent)))
+		return nil, fmt.Errorf("Parse resp content has different length (%d) than expected (%d)", numOfElements, len(respContent))
 	} else {
 		return respContent, nil
 	}
 }
 
-func encodeBulkString(content RespContent) []byte {
-	if content.dataType != BulkString {
+func EncodeBulkString(content RespContent) []byte {
+	if content.DataType != BulkString {
 		return nil
 	}
 
-	lenBytes := []byte(strconv.Itoa(len(content.value)))
+	lenBytes := []byte(strconv.Itoa(len(content.Value)))
 	stringSize := append([]byte{BulkString}, lenBytes...)
 
-	stringContent := []byte(content.value)
+	stringContent := []byte(content.Value)
 	sep := []byte(respSeparator)
 
 	totalLen := len(stringSize) + len(sep) + len(stringContent) + len(sep)
@@ -134,14 +135,14 @@ func encodeBulkString(content RespContent) []byte {
 }
 
 func decodeBulkString(bulkString []byte) (*RespContent, error) {
-	log(fmt.Sprintf("(Bulk parser) input: %v", bulkString))
+	utils.Log(fmt.Sprintf("(Bulk parser) input: %v", bulkString))
 	if bulkString[0] != byte(BulkString) {
 		return nil, errors.New("Not a bulk string")
 	}
 
 	splitBulkString := bytes.Split(bulkString, []byte(respSeparator))
-	log(fmt.Sprintf("(Bulk parser) size part: %s", splitBulkString[0]))
-	log(fmt.Sprintf("(Bulk parser) data part: %s", splitBulkString[2]))
+	utils.Log(fmt.Sprintf("(Bulk parser) size part: %s", splitBulkString[0]))
+	utils.Log(fmt.Sprintf("(Bulk parser) data part: %s", splitBulkString[2]))
 
 	stringSize, err := strconv.Atoi(string(splitBulkString[0][1:])) // remove data type prefix
 	if err != nil {
@@ -150,51 +151,13 @@ func decodeBulkString(bulkString []byte) (*RespContent, error) {
 
 	stringContent := string(splitBulkString[1])
 	if len(stringContent) != stringSize {
-		return nil, errors.New(fmt.Sprintf("Parsed content length (%d) not equal to bulk string content length (%d)", len(stringContent), stringSize))
+		return nil, fmt.Errorf("Parsed content length (%d) not equal to bulk string content length (%d)", len(stringContent), stringSize)
 	}
 
 	respContent := RespContent{
-		value:    stringContent,
-		dataType: BulkString,
+		Value:    stringContent,
+		DataType: BulkString,
 	}
 
 	return &respContent, nil
-}
-
-func elementsToCommand(elements []RespContent) Command {
-	if len(elements) == 0 {
-		// TODO return error instead PING
-		return Command{
-			commandType:   "PING",
-			commandValues: nil,
-		}
-	} else if len(elements) == 1 {
-		return Command{
-			commandType:   elements[0].value,
-			commandValues: nil,
-		}
-	} else {
-		commandType := elements[0].value
-		commandValues := make([]string, 0)
-		for _, content := range elements[1:] {
-			commandValues = append(commandValues, content.value)
-		}
-		return Command{
-			commandType:   commandType,
-			commandValues: commandValues,
-		}
-	}
-}
-
-func parseCommand(cmd []byte) (*Command, error) {
-	// A client sends the Redis server an array consisting of only bulk strings.
-	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
-	arrayElements, error := ParseArray(cmd)
-	if error != nil {
-		// TODO error
-		return nil, error
-	}
-
-	command := elementsToCommand(arrayElements)
-	return &command, nil
 }
