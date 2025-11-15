@@ -2,11 +2,14 @@ package command
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
 type Command struct {
@@ -50,7 +53,7 @@ func handleGet(command *Command) (respparser.RespContent, error) {
 
 	get := store.Get(command.CommandValues[0])
 
-	isEmpty := get == store.StorageValue{}
+	isEmpty := get == store.KeyStoreValue{}
 
 	resp := respparser.RespContent{
 		Value:    get.Value,
@@ -61,36 +64,66 @@ func handleGet(command *Command) (respparser.RespContent, error) {
 }
 
 func handleSet(command *Command) (respparser.RespContent, error) {
-	var key string
-	var value string
+	keyStoreValue := store.KeyStoreValue{
+		InsertedDatetime: time.Now(),
+	}
 	for n, arg := range command.CommandValues {
 		if n == 0 {
-			key = arg
+			keyStoreValue.Key = arg
 			continue
 		} else if n == 1 {
-			value = arg
+			keyStoreValue.Value = arg
 			continue
 		} else {
-			// handle other args
-			continue
+			switch arg {
+			case "PX":
+				// millisecond expiry
+				nextElem := n + 1
+				if nextElem >= len(command.CommandValues) {
+					utils.Log("(SET cmd) PX key expects value, but it seems to be missing!")
+					continue
+				}
+
+				pxValue := command.CommandValues[nextElem]
+				pxValueInt, err := strconv.Atoi(pxValue)
+				if err != nil {
+					utils.Log(fmt.Sprintf("(SET cmd) PX value is expected to be int, but got %s", pxValue))
+					continue
+				}
+				keyStoreValue.Expire = keyStoreValue.InsertedDatetime.Add(time.Duration(pxValueInt) * time.Millisecond)
+
+			case "EX":
+				// second expiry
+				nextElem := n + 1
+				if nextElem >= len(command.CommandValues) {
+					utils.Log("(SET cmd) EX key expects value, but it seems to be missing!")
+					continue
+				}
+
+				exValue := command.CommandValues[nextElem]
+				exValueInt, err := strconv.Atoi(exValue)
+				if err != nil {
+					utils.Log(fmt.Sprintf("(SET cmd) EX value is expected to be int, but got %s", exValue))
+					continue
+				}
+				keyStoreValue.Expire = keyStoreValue.InsertedDatetime.Add(time.Duration(exValueInt) * time.Second)
+				continue
+			default:
+				continue
+			}
 		}
 	}
 
-	if key == "" {
+	if keyStoreValue.Key == "" {
 		err := errors.New("SET Key missing in command args")
 		return respparser.RespContent{}, err
 	}
 
-	if value == "" {
+	if keyStoreValue.Value == "" {
 		err := errors.New("SET value missing in command args")
 		return respparser.RespContent{}, err
 	}
 
-	keyStoreValue := store.StorageValue{
-		Key:              key,
-		Value:            value,
-		InsertedDatetime: time.Now(),
-	}
 	store.Append(keyStoreValue)
 	return okResponse, nil
 }
