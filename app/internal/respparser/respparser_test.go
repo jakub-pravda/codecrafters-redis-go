@@ -57,7 +57,30 @@ func TestEncodeBulkStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ans := EncodeBulkString(tt.input)
+			ans := encodeBulkString(tt.input)
+			if !bytes.Equal(ans, tt.want) {
+				t.Errorf("got %v, want %v", ans, tt.want)
+			}
+		})
+	}
+}
+
+func TestEncodeSimpleStrings(t *testing.T) {
+	var tests = []struct {
+		name  string
+		input RespContent
+		want  []byte
+	}{
+		{
+			name:  "Simple string should be parsed",
+			input: RespContent{Value: "hello", DataType: SimpleString},
+			want:  []byte("+hello\r\n"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ans := encodeSimpleString(tt.input)
 			if !bytes.Equal(ans, tt.want) {
 				t.Errorf("got %v, want %v", ans, tt.want)
 			}

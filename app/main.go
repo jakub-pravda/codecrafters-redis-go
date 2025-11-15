@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/command"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/eventloop"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 	"io"
 	"net"
 	"os"
+
+	"github.com/codecrafters-io/redis-starter-go/app/internal/command"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/eventloop"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -85,7 +87,8 @@ func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 			MainTask: func() {
 				cmdResult := handleCommandRequest(command)
 				utils.Log(fmt.Sprintf("Sending response: %s", cmdResult.Value))
-				_, writeErr := conn.Write(cmdResult.Value)
+				encodedResp := respparser.EncodeRespContent(cmdResult.Value)
+				_, writeErr := conn.Write(encodedResp)
 				if writeErr != nil {
 					utils.Log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
 				}

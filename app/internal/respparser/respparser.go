@@ -11,17 +11,20 @@ import (
 )
 
 const (
-	Array      = '*'
-	BulkString = '$'
-	Integer    = ':'
+	Array        = '*'
+	BulkString   = '$'
+	Integer      = ':'
+	SimpleString = '+'
 )
 
 type RespContent struct {
 	Value    string
 	DataType byte
+	IsEmpty  bool
 }
 
-const respSeparator = "\r\n"
+var respSeparator = []byte("\r\n")
+var respNil = append([]byte("$-1"), respSeparator...)
 
 func isDataTypeDefinition(respContent []byte) bool {
 	if len(respContent) == 0 {
@@ -42,7 +45,7 @@ func nextDataContent(respContent []byte) ([]byte, []byte) {
 	}
 
 	// get separators index
-	separatorIndex := strings.Index(string(respContent), respSeparator) + len(respSeparator)
+	separatorIndex := strings.Index(string(respContent), string(respSeparator)) + len(respSeparator)
 	utils.Log(fmt.Sprintf("(Data content iterator) Separator index: %d", separatorIndex))
 
 	next := respContent[:separatorIndex]
@@ -67,7 +70,7 @@ func parseArrayContent(arrayType []byte) (int, error) {
 		return 0, errors.New("Not an array")
 	}
 
-	separatorIndex := strings.Index(string(arrayType), respSeparator)
+	separatorIndex := strings.Index(string(arrayType), string(respSeparator))
 	// remove data prefix and separator suffix
 	numOfElements, err := strconv.Atoi(string(arrayType[1:separatorIndex]))
 	if err != nil {
@@ -112,7 +115,9 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 	}
 }
 
-func EncodeBulkString(content RespContent) []byte {
+// ** BULK STRING ***
+
+func encodeBulkString(content RespContent) []byte {
 	if content.DataType != BulkString {
 		return nil
 	}
@@ -121,15 +126,14 @@ func EncodeBulkString(content RespContent) []byte {
 	stringSize := append([]byte{BulkString}, lenBytes...)
 
 	stringContent := []byte(content.Value)
-	sep := []byte(respSeparator)
 
-	totalLen := len(stringSize) + len(sep) + len(stringContent) + len(sep)
+	totalLen := len(stringSize) + len(respSeparator) + len(stringContent) + len(respSeparator)
 	result := make([]byte, 0, totalLen)
 
 	result = append(result, stringSize...)
-	result = append(result, sep...)
+	result = append(result, respSeparator...)
 	result = append(result, stringContent...)
-	result = append(result, sep...)
+	result = append(result, respSeparator...)
 
 	return result
 }
@@ -160,4 +164,29 @@ func decodeBulkString(bulkString []byte) (*RespContent, error) {
 	}
 
 	return &respContent, nil
+}
+
+// ** SIMPLE STRINGS ***
+
+func encodeSimpleString(content RespContent) []byte {
+	result := append([]byte{content.DataType}, []byte(content.Value)...)
+	result = append(result, respSeparator...)
+
+	return result
+}
+
+// ** content ***
+func EncodeRespContent(content RespContent) []byte {
+	if content.IsEmpty {
+		return respNil
+	}
+
+	switch content.DataType {
+	case BulkString:
+		return encodeBulkString(content)
+	case SimpleString:
+		return encodeSimpleString(content)
+	default:
+		return respNil
+	}
 }
