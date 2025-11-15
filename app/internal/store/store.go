@@ -17,7 +17,7 @@ type KeyStoreValue struct {
 	Key              string
 	Value            string
 	InsertedDatetime time.Time
-	Expire           time.Time
+	Expire           *time.Time // Optional: nil if not set
 }
 
 func Append(value KeyStoreValue) {
@@ -28,7 +28,7 @@ func Append(value KeyStoreValue) {
 func Get(key string) KeyStoreValue {
 	get := keyStore[key]
 
-	if get.Key != "" && time.Now().After(get.Expire) {
+	if get.Expire != nil && time.Now().After(*get.Expire) {
 		utils.Log(fmt.Sprintf("(KeyValueStore) Get key = %s expired", key))
 		delete(keyStore, key)
 		return notFound

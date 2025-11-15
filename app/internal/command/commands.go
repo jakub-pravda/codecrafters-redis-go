@@ -90,7 +90,8 @@ func handleSet(command *Command) (respparser.RespContent, error) {
 					utils.Log(fmt.Sprintf("(SET cmd) PX value is expected to be int, but got %s", pxValue))
 					continue
 				}
-				keyStoreValue.Expire = keyStoreValue.InsertedDatetime.Add(time.Duration(pxValueInt) * time.Millisecond)
+				expires := keyStoreValue.InsertedDatetime.Add(time.Duration(pxValueInt) * time.Millisecond)
+				keyStoreValue.Expire = &expires
 
 			case "EX":
 				// second expiry
@@ -106,7 +107,8 @@ func handleSet(command *Command) (respparser.RespContent, error) {
 					utils.Log(fmt.Sprintf("(SET cmd) EX value is expected to be int, but got %s", exValue))
 					continue
 				}
-				keyStoreValue.Expire = keyStoreValue.InsertedDatetime.Add(time.Duration(exValueInt) * time.Second)
+				expires := keyStoreValue.InsertedDatetime.Add(time.Duration(exValueInt) * time.Second)
+				keyStoreValue.Expire = &expires
 				continue
 			default:
 				continue
