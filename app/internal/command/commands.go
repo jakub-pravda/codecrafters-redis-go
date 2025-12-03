@@ -48,11 +48,10 @@ func handleGet(command *Command) (respparser.RespContent, error) {
 	if command.CommandType != "GET" {
 		return respparser.RespContent{}, errors.New("Not a GET")
 	} else if len(command.CommandValues) != 1 {
-		return respparser.RespContent{}, errors.New("Get must contains only key asr command arg")
+		return respparser.RespContent{}, errors.New("GET must contains only one value (key)")
 	}
 
 	get := store.Get(command.CommandValues[0])
-
 	isEmpty := get == store.KeyStoreValue{}
 
 	resp := respparser.RespContent{
@@ -138,6 +137,28 @@ func handlePing() respparser.RespContent {
 	return pong
 }
 
+func handleType(command *Command) (respparser.RespContent, error) {
+	if command.CommandType != "TYPE" {
+		return respparser.RespContent{}, errors.New("Not a TYPE")
+	} else if len(command.CommandValues) != 1 {
+		return respparser.RespContent{}, errors.New("TYPE must contains only one value (key)")
+	}
+
+	get := store.Get(command.CommandValues[0])
+	isEmpty := get == store.KeyStoreValue{}
+
+	getType := "none"
+	if !isEmpty {
+		getType = "string"
+	}
+
+	resp := respparser.RespContent{
+		Value:    getType,
+		DataType: respparser.SimpleString,
+	}
+	return resp, nil
+}
+
 func ParseCommand(cmd []byte) (*Command, error) {
 	// A client sends the Redis server an array consisting of only bulk strings.
 	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
@@ -169,6 +190,12 @@ func ProcessCommand(command *Command) (CommandResponse, error) {
 		return CommandResponse{getResponse}, nil
 	case "SET":
 		setResponse, err := handleSet(command)
+		if err != nil {
+			return CommandResponse{}, err
+		}
+		return CommandResponse{setResponse}, nil
+	case "TYPE":
+		setResponse, err := handleType(command)
 		if err != nil {
 			return CommandResponse{}, err
 		}
