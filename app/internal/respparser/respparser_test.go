@@ -80,7 +80,7 @@ func TestEncodeSimpleStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ans := encodeSimpleString(tt.input)
+			ans := encodeSimpleString(tt.input.Value)
 			if !bytes.Equal(ans, tt.want) {
 				t.Errorf("got %v, want %v", ans, tt.want)
 			}

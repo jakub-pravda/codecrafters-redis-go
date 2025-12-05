@@ -1,0 +1,165 @@
+package command
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
+)
+
+func parsePingCommand(command *Command) (PingCommand, error) {
+	return PingCommand{}, nil
+}
+
+func parseEchoCommand(command *Command) (EchoCommand, error) {
+	if command.CommandType != "ECHO" {
+		return EchoCommand{}, errors.New("Not an ECHO")
+	}
+
+	echoCommand := EchoCommand{
+		message: strings.Join(command.CommandValues, " "),
+	}
+	return echoCommand, nil
+}
+
+func parseGetCommand(command *Command) (GetCommand, error) {
+	if command.CommandType != "GET" {
+		return GetCommand{}, errors.New("Not a GET")
+	} else if len(command.CommandValues) != 1 {
+		return GetCommand{}, errors.New("GET must contains only one value (key)")
+	}
+
+	getCommand := GetCommand{
+		key: command.CommandValues[0],
+	}
+	return getCommand, nil
+}
+
+func parseSetCommand(command *Command) (SetCommand, error) {
+	if len(command.CommandValues) < 2 {
+		return SetCommand{}, errors.New("(SET cmd) too few arguments. At least key and value expected")
+	}
+
+	setCommand := SetCommand{}
+
+	for n, arg := range command.CommandValues {
+		if n == 0 {
+			setCommand.key = arg
+			continue
+		} else if n == 1 {
+			setCommand.value = arg
+			continue
+		} else {
+			switch arg {
+			case "PX":
+				// millisecond expiry
+				nextElem := n + 1
+				if nextElem >= len(command.CommandValues) {
+					errMsg := "(SET cmd) PX key expects value, but it seems to be missing!"
+					utils.Log(errMsg)
+					return SetCommand{}, errors.New(errMsg)
+				}
+
+				pxValue := command.CommandValues[nextElem]
+				pxValueInt, err := strconv.Atoi(pxValue)
+				if err != nil {
+					errMsg := fmt.Sprintf("(SET cmd) PX value is expected to be int, but got %s", pxValue)
+					utils.Log(errMsg)
+					return SetCommand{}, errors.New(errMsg)
+				}
+				setCommand.recordExpirationMillis = pxValueInt
+
+			case "EX":
+				// second expiry
+				nextElem := n + 1
+				if nextElem >= len(command.CommandValues) {
+					errMsg := "(SET cmd) EX key expects value, but it seems to be missing!"
+					utils.Log(errMsg)
+					return SetCommand{}, errors.New(errMsg)
+				}
+
+				exValue := command.CommandValues[nextElem]
+				exValueInt, err := strconv.Atoi(exValue)
+				if err != nil {
+					errMsg := fmt.Sprintf("(SET cmd) EX value is expected to be int, but got %s", exValue)
+					utils.Log(errMsg)
+					return SetCommand{}, errors.New(errMsg)
+				}
+				setCommand.recordExpirationMillis = exValueInt * 1000 // from sec to millis
+			default:
+				continue
+			}
+		}
+	}
+	return setCommand, nil
+}
+
+func parseTypeCommand(command *Command) (TypeCommand, error) {
+	if command.CommandType != "TYPE" {
+		return TypeCommand{}, errors.New("Not a TYPE")
+	} else if len(command.CommandValues) != 1 {
+		return TypeCommand{}, errors.New("TYPE must contains only one value (key)")
+	}
+
+	typeCommand := TypeCommand{
+		key: command.CommandValues[0],
+	}
+	return typeCommand, nil
+}
+
+func elementsToCommand(elements []respparser.RespContent) Command {
+	if len(elements) == 0 {
+		// TODO return error instead PING
+		return Command{
+			CommandType:   "PING",
+			CommandValues: nil,
+		}
+	} else if len(elements) == 1 {
+		return Command{
+			CommandType:   elements[0].Value,
+			CommandValues: nil,
+		}
+	} else {
+		commandType := elements[0].Value
+		commandValues := make([]string, 0)
+		for _, content := range elements[1:] {
+			commandValues = append(commandValues, content.Value)
+		}
+		return Command{
+			CommandType:   commandType,
+			CommandValues: commandValues,
+		}
+	}
+}
+
+func GetCommandHandler(command *Command) (CommandHandler, error) {
+	switch strings.ToUpper(command.CommandType) {
+	case "PING":
+		return parsePingCommand(command)
+	case "ECHO":
+		return parseEchoCommand(command)
+	case "GET":
+		return parseEchoCommand(command)
+	case "SET":
+		return parseSetCommand(command)
+	case "TYPE":
+		return parseTypeCommand(command)
+	default:
+		return PingCommand{}, errors.ErrUnsupported
+	}
+}
+
+func ParseCommand(cmd []byte) (*Command, error) {
+	// A client sends the Redis server an array consisting of only bulk strings.
+	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
+	arrayElements, error := respparser.ParseArray(cmd)
+	if error != nil {
+		return nil, error
+	}
+
+	command := elementsToCommand(arrayElements)
+	return &command, nil
+}

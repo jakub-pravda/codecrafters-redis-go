@@ -52,13 +52,29 @@ func main() {
 }
 
 func handleCommandRequest(requestCommands []byte) command.CommandResponse {
-	cmd, _ := command.ParseCommand(requestCommands) // TODO err handling
+	cmd, err := command.ParseCommand(requestCommands) // TODO err handling
+	if err != nil {
+		return command.ErrorResponse(err)
+	}
 
 	utils.Log(fmt.Sprintf("Command: %s", cmd))
-	cmdResponse, _ := command.ProcessCommand(cmd) // TODO error handling
+
+	commandHandler, err := command.GetCommandHandler(cmd)
+	if err != nil {
+		return command.ErrorResponse(err)
+	}
+
+	cmdResponse, err := commandHandler.Process()
+	if err != nil {
+		return command.ErrorResponse(err)
+	}
+
 	utils.Log(fmt.Sprintf("Command %s result: %s", cmd.CommandType, cmdResponse.Value))
 
-	return cmdResponse
+	response := command.CommandResponse{
+		Value: cmdResponse,
+	}
+	return response
 }
 
 func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {

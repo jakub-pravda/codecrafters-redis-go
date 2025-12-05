@@ -14,6 +14,7 @@ const (
 	Array        = '*'
 	BulkString   = '$'
 	Integer      = ':'
+	SimpleError  = '-'
 	SimpleString = '+'
 )
 
@@ -168,8 +169,15 @@ func decodeBulkString(bulkString []byte) (*RespContent, error) {
 
 // ** SIMPLE STRINGS ***
 
-func encodeSimpleString(content RespContent) []byte {
-	result := append([]byte{content.DataType}, []byte(content.Value)...)
+func encodeSimpleString(s string) []byte {
+	result := append([]byte{SimpleString}, []byte(s)...)
+	result = append(result, respSeparator...)
+
+	return result
+}
+
+func encodeSimpleError(errorMessage string) []byte {
+	result := append([]byte{SimpleError}, []byte(errorMessage)...)
 	result = append(result, respSeparator...)
 
 	return result
@@ -185,7 +193,9 @@ func EncodeRespContent(content RespContent) []byte {
 	case BulkString:
 		return encodeBulkString(content)
 	case SimpleString:
-		return encodeSimpleString(content)
+		return encodeSimpleString(content.Value)
+	case SimpleError:
+		return encodeSimpleError(content.Value)
 	default:
 		return respNil
 	}
