@@ -1,8 +1,8 @@
 package command
 
 import (
+	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
 )
 
 type Command struct {
@@ -11,7 +11,7 @@ type Command struct {
 }
 
 type CommandContext struct {
-	KeyStore *store.KeyStore
+	KeyStore *keyvaluestore.KeyStore
 }
 
 type CommandResponse struct {
@@ -26,21 +26,27 @@ var okResponse = respparser.RespContent{
 type PingCommand struct{}
 
 type EchoCommand struct {
-	message string
+	Message string
 }
 
 type GetCommand struct {
-	key string
+	Key string
 }
 
 type SetCommand struct {
-	key                    string
-	value                  string
-	recordExpirationMillis int
+	Key                    string
+	Value                  string
+	RecordExpirationMillis int
 }
 
 type TypeCommand struct {
-	key string
+	Key string
+}
+
+type XaddCommand struct {
+	StreamKey   string
+	EntryId     string
+	FieldValues map[string]string
 }
 
 func ErrorResponse(e error) CommandResponse {

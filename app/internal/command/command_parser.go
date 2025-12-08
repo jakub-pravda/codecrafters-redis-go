@@ -3,6 +3,7 @@ package command
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -20,7 +21,7 @@ func parseEchoCommand(command *Command) (EchoCommand, error) {
 	}
 
 	echoCommand := EchoCommand{
-		message: strings.Join(command.CommandValues, " "),
+		Message: strings.Join(command.CommandValues, " "),
 	}
 	return echoCommand, nil
 }
@@ -33,7 +34,7 @@ func parseGetCommand(command *Command) (GetCommand, error) {
 	}
 
 	getCommand := GetCommand{
-		key: command.CommandValues[0],
+		Key: command.CommandValues[0],
 	}
 	return getCommand, nil
 }
@@ -43,14 +44,16 @@ func parseSetCommand(command *Command) (SetCommand, error) {
 		return SetCommand{}, errors.New("(SET cmd) too few arguments. At least key and value expected")
 	}
 
-	setCommand := SetCommand{}
+	setCommand := SetCommand{
+		RecordExpirationMillis: math.MaxInt32,
+	}
 
 	for n, arg := range command.CommandValues {
 		if n == 0 {
-			setCommand.key = arg
+			setCommand.Key = arg
 			continue
 		} else if n == 1 {
-			setCommand.value = arg
+			setCommand.Value = arg
 			continue
 		} else {
 			switch arg {
@@ -70,7 +73,7 @@ func parseSetCommand(command *Command) (SetCommand, error) {
 					utils.Log(errMsg)
 					return SetCommand{}, errors.New(errMsg)
 				}
-				setCommand.recordExpirationMillis = pxValueInt
+				setCommand.RecordExpirationMillis = pxValueInt
 
 			case "EX":
 				// second expiry
@@ -88,7 +91,7 @@ func parseSetCommand(command *Command) (SetCommand, error) {
 					utils.Log(errMsg)
 					return SetCommand{}, errors.New(errMsg)
 				}
-				setCommand.recordExpirationMillis = exValueInt * 1000 // from sec to millis
+				setCommand.RecordExpirationMillis = exValueInt * 1000 // from sec to millis
 			default:
 				continue
 			}
@@ -101,13 +104,54 @@ func parseTypeCommand(command *Command) (TypeCommand, error) {
 	if command.CommandType != "TYPE" {
 		return TypeCommand{}, errors.New("Not a TYPE")
 	} else if len(command.CommandValues) != 1 {
-		return TypeCommand{}, errors.New("TYPE must contains only one value (key)")
+		return TypeCommand{}, errors.New("(TYPE cmd) must contains only one value (key)")
 	}
 
 	typeCommand := TypeCommand{
-		key: command.CommandValues[0],
+		Key: command.CommandValues[0],
 	}
 	return typeCommand, nil
+}
+
+func parseXaddCommand(command *Command) (XaddCommand, error) {
+	if len(command.CommandValues) < 4 {
+		return XaddCommand{}, errors.New("(XADD cmd) Too few arguments. At least stream-key, entry-id, akey and value expected")
+	}
+
+	xaddCommand := XaddCommand{}
+
+	keys := []string{}
+	values := []string{}
+
+	for n, arg := range command.CommandValues {
+		if n == 0 {
+			xaddCommand.StreamKey = arg
+			continue
+		} else if n == 1 {
+			xaddCommand.EntryId = arg
+			continue
+		} else {
+			if n%2 == 0 {
+				// keys
+				keys = append(keys, arg)
+			} else {
+				// values
+				values = append(values, arg)
+			}
+		}
+	}
+
+	if len(keys) != len(values) {
+		return XaddCommand{}, errors.New("(XADD cmd) number of keys must be same as number of values!")
+	}
+
+	keyValues := make(map[string]string, len(keys))
+	for i, k := range keys {
+		keyValues[k] = values[i]
+	}
+
+	xaddCommand.FieldValues = keyValues
+	return xaddCommand, nil
 }
 
 func elementsToCommand(elements []respparser.RespContent) Command {
@@ -142,11 +186,13 @@ func GetCommandHandler(command *Command) (CommandHandler, error) {
 	case "ECHO":
 		return parseEchoCommand(command)
 	case "GET":
-		return parseEchoCommand(command)
+		return parseGetCommand(command)
 	case "SET":
 		return parseSetCommand(command)
 	case "TYPE":
 		return parseTypeCommand(command)
+	case "XADD":
+		return parseXaddCommand(command)
 	default:
 		return PingCommand{}, errors.ErrUnsupported
 	}

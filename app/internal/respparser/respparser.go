@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
 const (
@@ -101,7 +102,7 @@ func ParseArray(cmd []byte) ([]RespContent, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Can't parse bulk string: %s", err.Error())
 			}
-			utils.Log(fmt.Sprintf("Appending resp content (bulk string): %v", *bulkString))
+			utils.Log(fmt.Sprintf("(Array parser) Appending resp content (bulk string): %v", *bulkString))
 			respContent = append(respContent, *bulkString)
 			nextIter = tail
 		} else {

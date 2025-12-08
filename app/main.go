@@ -57,7 +57,7 @@ func handleCommandRequest(requestCommands []byte) command.CommandResponse {
 		return command.ErrorResponse(err)
 	}
 
-	utils.Log(fmt.Sprintf("Command: %s", cmd))
+	utils.Log(fmt.Sprintf("(Request handler) Command: %s", cmd))
 
 	commandHandler, err := command.GetCommandHandler(cmd)
 	if err != nil {
@@ -69,7 +69,7 @@ func handleCommandRequest(requestCommands []byte) command.CommandResponse {
 		return command.ErrorResponse(err)
 	}
 
-	utils.Log(fmt.Sprintf("Command %s result: %s", cmd.CommandType, cmdResponse.Value))
+	utils.Log(fmt.Sprintf("(Request handler) Command %s result: %s", cmd.CommandType, cmdResponse.Value))
 
 	response := command.CommandResponse{
 		Value: cmdResponse,
@@ -85,28 +85,28 @@ func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 		n, readErr := conn.Read(buf)
 		if readErr != nil {
 			if readErr == io.EOF {
-				utils.Log("EOF detected. Closing connection")
+				utils.Log("(Connection handler) EOF detected. Closing connection")
 				break
 			} else {
-				utils.Log(fmt.Sprintf("Error reading client: %s", readErr.Error()))
+				utils.Log(fmt.Sprintf("(Connection handler) Error reading client: %s", readErr.Error()))
 				break
 			}
 		}
 
 		command := buf[:n]
 
-		utils.Log(fmt.Sprintf("Recieved data: %s", command))
-		utils.Log(fmt.Sprintf("Recieved data (str): %s", string(command)))
+		utils.Log(fmt.Sprintf("(Connection handler) Recieved data: %s", command))
+		utils.Log(fmt.Sprintf("(Connection handler) Recieved data (str): %s", string(command)))
 
 		eventloop.Add(eventLoop, &eventloop.Task{
 			// TODO split command processing and client write
 			MainTask: func() {
 				cmdResult := handleCommandRequest(command)
-				utils.Log(fmt.Sprintf("Sending response: %s", cmdResult.Value))
+				utils.Log(fmt.Sprintf("(Connection handler) Sending response: %s", cmdResult.Value))
 				encodedResp := respparser.EncodeRespContent(cmdResult.Value)
 				_, writeErr := conn.Write(encodedResp)
 				if writeErr != nil {
-					utils.Log(fmt.Sprintf("Error writing client: %s", writeErr.Error()))
+					utils.Log(fmt.Sprintf("(Connection handler) Error writing client: %s", writeErr.Error()))
 				}
 			},
 			IsBlocking: true,

@@ -3,8 +3,9 @@ package command
 import (
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
-	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/streamstore"
 )
 
 type CommandHandler interface {
@@ -13,7 +14,7 @@ type CommandHandler interface {
 
 func (c EchoCommand) Process() (respparser.RespContent, error) {
 	resp := respparser.RespContent{
-		Value:    c.message,
+		Value:    c.Message,
 		DataType: respparser.BulkString,
 	}
 	return resp, nil
@@ -28,45 +29,70 @@ func (c PingCommand) Process() (respparser.RespContent, error) {
 }
 
 func (c GetCommand) Process() (respparser.RespContent, error) {
-	get := store.Get(c.key)
-	isEmpty := get == store.KeyStoreValue{}
+	get, found := keyvaluestore.Get(c.Key)
 
 	resp := respparser.RespContent{
 		Value:    get.Value,
 		DataType: respparser.BulkString,
-		IsEmpty:  isEmpty,
+		IsEmpty:  !found,
 	}
 	return resp, nil
 }
 
 func (c SetCommand) Process() (respparser.RespContent, error) {
-	keyStoreValue := store.KeyStoreValue{
+	keyStoreValue := keyvaluestore.KeyStoreValue{
 		InsertedDatetime: time.Now(),
 	}
 
-	expires := keyStoreValue.InsertedDatetime.Add(time.Duration(c.recordExpirationMillis) * time.Millisecond)
+	expires := keyStoreValue.InsertedDatetime.Add(time.Duration(c.RecordExpirationMillis) * time.Millisecond)
 
-	keyStoreValue.Key = c.key
-	keyStoreValue.Value = c.value
+	keyStoreValue.Key = c.Key
+	keyStoreValue.Value = c.Value
 	keyStoreValue.Expire = &expires
 
-	store.Append(keyStoreValue)
+	keyvaluestore.Append(keyStoreValue)
 	return okResponse, nil
 }
 
 func (c TypeCommand) Process() (respparser.RespContent, error) {
-	get := store.Get(c.key)
-	isEmpty := get == store.KeyStoreValue{}
 
-	getType := "none"
-	if !isEmpty {
-		// TODO support other types
-		getType = "string"
+	_, foundInKv := keyvaluestore.Get(c.Key)
+	if foundInKv {
+		resp := respparser.RespContent{
+			Value:    "string",
+			DataType: respparser.SimpleString,
+		}
+		return resp, nil
+	}
+
+	_, foundInStream := streamstore.Get(c.Key)
+	if foundInStream {
+		resp := respparser.RespContent{
+			Value:    "stream",
+			DataType: respparser.SimpleString,
+		}
+		return resp, nil
 	}
 
 	resp := respparser.RespContent{
-		Value:    getType,
+		Value:    "none",
 		DataType: respparser.SimpleString,
 	}
+	return resp, nil
+}
+
+func (c XaddCommand) Process() (respparser.RespContent, error) {
+	streamValue := streamstore.RedisStream{
+		StreamKey:        c.StreamKey,
+		EntryId:          c.EntryId,
+		FieldValues:      c.FieldValues,
+		InsertedDatetime: time.Now(),
+	}
+	streamstore.Append(streamValue)
+	resp := respparser.RespContent{
+		Value:    streamValue.EntryId,
+		DataType: respparser.BulkString,
+	}
+
 	return resp, nil
 }

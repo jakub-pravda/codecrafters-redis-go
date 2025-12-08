@@ -1,4 +1,4 @@
-package store
+package keyvaluestore
 
 import (
 	"fmt"
@@ -10,8 +10,6 @@ import (
 type KeyStore map[string]KeyStoreValue
 
 var keyStore = make(KeyStore)
-
-var notFound = KeyStoreValue{}
 
 type KeyStoreValue struct {
 	Key              string
@@ -25,15 +23,15 @@ func Append(value KeyStoreValue) {
 	keyStore[value.Key] = value
 }
 
-func Get(key string) KeyStoreValue {
-	get := keyStore[key]
+func Get(key string) (KeyStoreValue, bool) {
+	get, found := keyStore[key]
 
 	if get.Expire != nil && time.Now().After(*get.Expire) {
 		utils.Log(fmt.Sprintf("(KeyValueStore) Get key = %s expired", key))
 		delete(keyStore, key)
-		return notFound
+		return KeyStoreValue{}, false
 	}
 
 	utils.Log(fmt.Sprintf("(KeyValueStore) Get key = %s, value = %s", key, get.Value))
-	return get
+	return get, found
 }
