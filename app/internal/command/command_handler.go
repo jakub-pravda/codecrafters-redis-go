@@ -1,11 +1,14 @@
 package command
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/streamstore"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
 type CommandHandler interface {
@@ -65,7 +68,7 @@ func (c TypeCommand) Process() (respparser.RespContent, error) {
 		return resp, nil
 	}
 
-	_, foundInStream := streamstore.Get(c.Key)
+	_, foundInStream := streamstore.GetTopItem(c.Key)
 	if foundInStream {
 		resp := respparser.RespContent{
 			Value:    "stream",
@@ -83,16 +86,36 @@ func (c TypeCommand) Process() (respparser.RespContent, error) {
 
 func (c XaddCommand) Process() (respparser.RespContent, error) {
 	streamValue := streamstore.RedisStream{
-		StreamKey:        c.StreamKey,
-		EntryId:          c.EntryId,
-		FieldValues:      c.FieldValues,
-		InsertedDatetime: time.Now(),
+		StreamKey:               c.StreamKey,
+		EntryIdMillisecondsTime: c.EntryIdMillisecondsTime,
+		EntryIdSequenceNumber:   c.EntryIdSequenceNumber,
+		FieldValues:             c.FieldValues,
+		InsertedDatetime:        time.Now(),
 	}
+
+	if err := validateEntryId(streamValue); err != nil {
+		utils.Log(fmt.Sprintf("(XADD cmd) EntryId validation failed: %e)", err))
+		return respparser.RespContent{}, err
+	}
+
 	streamstore.Append(streamValue)
 	resp := respparser.RespContent{
-		Value:    streamValue.EntryId,
+		Value:    c.GetEntryId(),
 		DataType: respparser.BulkString,
 	}
 
 	return resp, nil
+}
+
+func validateEntryId(s streamstore.RedisStream) error {
+	if s.EntryIdMillisecondsTime < 0 || s.EntryIdSequenceNumber <= 0 {
+		return errors.New("ERR The ID specified in XADD must be greater than 0-0")
+	}
+
+	topItem, found := streamstore.GetTopItem(s.StreamKey)
+	if found && (topItem.EntryIdMillisecondsTime > s.EntryIdMillisecondsTime || topItem.EntryIdSequenceNumber >= s.EntryIdSequenceNumber) {
+		return errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+	} else {
+		return nil
+	}
 }

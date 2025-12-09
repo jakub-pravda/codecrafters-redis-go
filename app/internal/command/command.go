@@ -1,6 +1,8 @@
 package command
 
 import (
+	"fmt"
+
 	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
 )
@@ -44,9 +46,14 @@ type TypeCommand struct {
 }
 
 type XaddCommand struct {
-	StreamKey   string
-	EntryId     string
-	FieldValues map[string]string
+	StreamKey               string
+	EntryIdMillisecondsTime int
+	EntryIdSequenceNumber   int
+	FieldValues             map[string]string
+}
+
+func (c XaddCommand) GetEntryId() string {
+	return fmt.Sprintf("%d-%d", c.EntryIdMillisecondsTime, c.EntryIdSequenceNumber)
 }
 
 func ErrorResponse(e error) CommandResponse {

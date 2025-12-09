@@ -17,15 +17,14 @@ var streamStore = make(StreamStore)
 //   Entry3 (key value)
 
 type RedisStream struct {
-	StreamKey        string
-	EntryId          string
-	FieldValues      map[string]string
-	InsertedDatetime time.Time
+	StreamKey               string
+	EntryIdMillisecondsTime int
+	EntryIdSequenceNumber   int
+	FieldValues             map[string]string
+	InsertedDatetime        time.Time
 }
 
 func Append(value RedisStream) {
-	utils.Log(fmt.Sprintf("(StreamStoreValue) Append: StreamKey = %s, EntryId = %s", value.StreamKey, value.EntryId))
-
 	stream, found := streamStore[value.StreamKey]
 
 	if found {
@@ -40,9 +39,13 @@ func Append(value RedisStream) {
 	}
 }
 
-func Get(streamKey string) (RedisStream, bool) {
+func GetTopItem(streamKey string) (RedisStream, bool) {
 	// TODO get stream implementation
-	_, found := streamStore[streamKey]
+	stream, found := streamStore[streamKey]
 	utils.Log(fmt.Sprintf("(StreamStoreValue) Get: StreamKey = %s, found = %t", streamKey, found))
-	return RedisStream{}, found
+	if (!found) || len(stream) < 1 {
+		return RedisStream{}, false
+	}
+	last := stream[len(stream)-1]
+	return last, true
 }

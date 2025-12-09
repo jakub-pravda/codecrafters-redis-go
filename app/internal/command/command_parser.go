@@ -128,8 +128,14 @@ func parseXaddCommand(command *Command) (XaddCommand, error) {
 			xaddCommand.StreamKey = arg
 			continue
 		} else if n == 1 {
-			xaddCommand.EntryId = arg
-			continue
+			millisecondsTime, sequenceNumber, err := parseXaddCommandEntryId(arg)
+			if err != nil {
+				return XaddCommand{}, err
+			} else {
+				xaddCommand.EntryIdMillisecondsTime = millisecondsTime
+				xaddCommand.EntryIdSequenceNumber = sequenceNumber
+				continue
+			}
 		} else {
 			if n%2 == 0 {
 				// keys
@@ -152,6 +158,31 @@ func parseXaddCommand(command *Command) (XaddCommand, error) {
 
 	xaddCommand.FieldValues = keyValues
 	return xaddCommand, nil
+}
+
+func parseXaddCommandEntryId(entryId string) (int, int, error) {
+	split := strings.Split(entryId, "-")
+	if len(split) != 2 {
+		// explicit entry id
+		errMsg := fmt.Sprintf("(XADD cmd) EntryId required format '<millisecondsTime>-<sequenceNumber>', but got: %s", entryId)
+		utils.Log(errMsg)
+		return 0, 0, errors.New(errMsg)
+	}
+
+	millisecondsTime, err := strconv.Atoi(split[0])
+	if err != nil {
+		errMsg := fmt.Sprintf("(XADD cmd) EntryId millisecondsTime must be an integer, but got: %s", split[0])
+		utils.Log(errMsg)
+		return 0, 0, errors.New(errMsg)
+	}
+
+	sequenceNumber, err := strconv.Atoi(split[1])
+	if err != nil {
+		errMsg := fmt.Sprintf("(XADD cmd) EntryId sequenceNumber must be an integer, but got: %s", split[1])
+		utils.Log(errMsg)
+		return 0, 0, errors.New(errMsg)
+	}
+	return millisecondsTime, sequenceNumber, nil
 }
 
 func elementsToCommand(elements []respparser.RespContent) Command {
