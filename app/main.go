@@ -102,7 +102,7 @@ func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 			// TODO split command processing and client write
 			MainTask: func() {
 				cmdResult := handleCommandRequest(command)
-				utils.Log(fmt.Sprintf("(Connection handler) Sending response: %s", cmdResult.Value))
+				utils.Log(fmt.Sprintf("(Connection handler) Sending response: %v", cmdResult.Value))
 				encodedResp := respparser.EncodeRespContent(cmdResult.Value)
 				_, writeErr := conn.Write(encodedResp)
 				if writeErr != nil {
