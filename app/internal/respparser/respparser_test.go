@@ -2,7 +2,10 @@ package respparser
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
+
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
 func TestDecodeBulkStrings(t *testing.T) {
@@ -21,10 +24,16 @@ func TestDecodeBulkStrings(t *testing.T) {
 			input: []byte("$5\r\nhello\r\n"),
 			want:  RespContent{Value: "hello", DataType: BulkString},
 		},
+		{
+			name:  "Bulk string with special char should be parsed",
+			input: []byte("$1\r\n*\r\n"),
+			want:  RespContent{Value: "*", DataType: BulkString},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			utils.Log(fmt.Sprintf("*** Running test: %s***", tt.name))
 			ans, err := decodeBulkString(tt.input)
 			if err != nil {
 				t.Errorf("result expected, but err got: %s", err.Error())
@@ -80,6 +89,7 @@ func TestEncodeSimpleStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			utils.Log(fmt.Sprintf("*** Running test: %s***", tt.name))
 			ans := encodeSimpleString(tt.input.Value)
 			if !bytes.Equal(ans, tt.want) {
 				t.Errorf("got %v, want %v", ans, tt.want)
@@ -118,6 +128,7 @@ func TestParseArray(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			utils.Log(fmt.Sprintf("*** Running test: %s***", tt.name))
 			ans, err := ParseArray(tt.input)
 			if err != nil {
 				t.Errorf("result expected, but err got: %s", err.Error())

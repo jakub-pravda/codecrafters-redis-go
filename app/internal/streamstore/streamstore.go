@@ -18,7 +18,7 @@ var streamStore = make(StreamStore)
 
 type RedisStream struct {
 	StreamKey               string
-	EntryIdMillisecondsTime int
+	EntryIdMillisecondsTime int64
 	EntryIdSequenceNumber   int
 	FieldValues             map[string]string
 	InsertedDatetime        time.Time
