@@ -268,15 +268,21 @@ func parseXrangeCommand(command *Command) (XRangeCommand, error) {
 	xRangeCommand.StartSequenceNumber = startSequenceNumber
 
 	endEntryId := command.CommandValues[2]
-	endMillis, endSequenceNumber, entryIdError = parseXCommandsEntryId(endEntryId)
-	if entryIdError != nil {
-		err := fmt.Errorf("(parseXrangeCommand) Can't decode end entry id %s: %e", endEntryId, entryIdError)
-		utils.Log(err.Error())
-		return xRangeCommand, err
-	}
-	// use default
-	if endSequenceNumber < 0 {
-		endSequenceNumber = 0
+	// + entries from the given start ID to the end of the stream
+	if endEntryId == "+" {
+		endMillis = math.MaxInt64
+		endSequenceNumber = math.MaxInt
+	} else {
+		endMillis, endSequenceNumber, entryIdError = parseXCommandsEntryId(endEntryId)
+		if entryIdError != nil {
+			err := fmt.Errorf("(parseXrangeCommand) Can't decode end entry id %s: %e", endEntryId, entryIdError)
+			utils.Log(err.Error())
+			return xRangeCommand, err
+		}
+		// use default
+		if endSequenceNumber < 0 {
+			endSequenceNumber = 0
+		}
 	}
 	xRangeCommand.EndMillisecondsTime = endMillis
 	xRangeCommand.EndSequenceNumber = endSequenceNumber

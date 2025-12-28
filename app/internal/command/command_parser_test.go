@@ -2,6 +2,7 @@ package command
 
 import (
 	"maps"
+	"math"
 	"testing"
 )
 
@@ -162,6 +163,19 @@ func TestParseXRangeCommand(t *testing.T) {
 				StartSequenceNumber:   0,
 				EndMillisecondsTime:   1526985054079,
 				EndSequenceNumber:     20,
+			},
+		},
+		{
+			name: "XRANGE end defined by + command",
+			input: Command{CommandType: "XRANGE", CommandValues: []string{
+				"stream-key", "1526985054079-1", "+",
+			}},
+			want: XRangeCommand{
+				StreamKey:             "stream-key",
+				StartMillisecondsTime: int64(1526985054079),
+				StartSequenceNumber:   1,
+				EndMillisecondsTime:   math.MaxInt64,
+				EndSequenceNumber:     math.MaxInt,
 			},
 		},
 	}
