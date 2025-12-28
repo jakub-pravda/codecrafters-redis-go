@@ -75,14 +75,24 @@ func GetItems(streamKey string, startMillis int64, endMillis int64, startSequenc
 	for _, s := range stream {
 		utils.Log(fmt.Sprintf("(StreamStoreValue) Iterating %s", s.StreamId()))
 
+		// Skip entries outside the time range
 		if s.EntryIdMillisecondsTime < startMillis || s.EntryIdMillisecondsTime > endMillis {
-			continue // Skip entries outside the time range
+			continue
 		}
 
-		// Check if the entry is within the sequence number range
-		if (s.EntryIdMillisecondsTime == startMillis && s.EntryIdSequenceNumber >= startSequenceNumber) ||
-			(s.EntryIdMillisecondsTime == endMillis && s.EntryIdSequenceNumber >= startSequenceNumber && s.EntryIdSequenceNumber <= endSequenceNumber) ||
-			(s.EntryIdMillisecondsTime > startMillis && s.EntryIdMillisecondsTime < endMillis) {
+		// Check if the entry is within the sequence number range for boundary times
+		isStartBoundary := s.EntryIdMillisecondsTime == startMillis &&
+			s.EntryIdSequenceNumber >= startSequenceNumber &&
+			s.EntryIdSequenceNumber <= endSequenceNumber
+
+		isEndBoundary := s.EntryIdMillisecondsTime == endMillis &&
+			s.EntryIdSequenceNumber >= startSequenceNumber &&
+			s.EntryIdSequenceNumber <= endSequenceNumber
+
+		isMiddleRange := s.EntryIdMillisecondsTime > startMillis &&
+			s.EntryIdMillisecondsTime < endMillis
+
+		if isStartBoundary || isEndBoundary || isMiddleRange {
 			result = append(result, s)
 		}
 	}

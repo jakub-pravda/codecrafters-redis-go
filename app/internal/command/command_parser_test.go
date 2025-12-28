@@ -150,6 +150,20 @@ func TestParseXRangeCommand(t *testing.T) {
 				EndSequenceNumber:     20,
 			},
 		},
+		{
+			name: "XRANGE start defined by - command",
+			input: Command{CommandType: "XRANGE", CommandValues: []string{
+				"stream-key", "-", "1526985054079-20",
+			}},
+			want: XRangeCommand{
+
+				StreamKey:             "stream-key",
+				StartMillisecondsTime: int64(0),
+				StartSequenceNumber:   0,
+				EndMillisecondsTime:   1526985054079,
+				EndSequenceNumber:     20,
+			},
+		},
 	}
 
 	for _, tt := range tests {

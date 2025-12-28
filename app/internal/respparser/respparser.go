@@ -137,7 +137,7 @@ func SerializeArray(r Array) ([]byte, error) {
 func SerializeBulkString(r BulkString) []byte {
 	var buf bytes.Buffer
 	buf.WriteByte(byte(TypeBulkString))
-	
+
 	if r.IsNull {
 		buf.WriteString("-1")
 		buf.WriteString(string(respSeparator))

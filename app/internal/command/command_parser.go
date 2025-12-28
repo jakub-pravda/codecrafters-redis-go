@@ -242,23 +242,35 @@ func parseXrangeCommand(command *Command) (XRangeCommand, error) {
 	xRangeCommand.StreamKey = command.CommandValues[0]
 
 	startEntryId := command.CommandValues[1]
-	startMillis, startSequenceNumber, startEntryIdErr := parseXCommandsEntryId(startEntryId)
-	if startEntryIdErr != nil {
-		err := fmt.Errorf("(parseXrangeCommand) Can't decode start entry id %s: %e", startEntryId, startEntryIdErr)
-		utils.Log(err.Error())
-		return xRangeCommand, err
-	}
-	// use default
-	if startSequenceNumber < 0 {
+
+	var startMillis, endMillis int64
+	var startSequenceNumber, endSequenceNumber int
+	var entryIdError error
+
+	// - retrieve entries from the very beginning
+	if startEntryId == "-" {
+		startMillis = 0
 		startSequenceNumber = 0
+	} else {
+		startMillis, startSequenceNumber, entryIdError = parseXCommandsEntryId(startEntryId)
+		if entryIdError != nil {
+			err := fmt.Errorf("(parseXrangeCommand) Can't decode start entry id %s: %e", startEntryId, entryIdError)
+			utils.Log(err.Error())
+			return xRangeCommand, err
+		}
+		// use default
+		if startSequenceNumber < 0 {
+			startSequenceNumber = 0
+		}
 	}
+
 	xRangeCommand.StartMillisecondsTime = startMillis
 	xRangeCommand.StartSequenceNumber = startSequenceNumber
 
 	endEntryId := command.CommandValues[2]
-	endMillis, endSequenceNumber, endEntryIdErr := parseXCommandsEntryId(endEntryId)
-	if endEntryIdErr != nil {
-		err := fmt.Errorf("(parseXrangeCommand) Can't decode end entry id %s: %e", endEntryIdErr, endEntryIdErr)
+	endMillis, endSequenceNumber, entryIdError = parseXCommandsEntryId(endEntryId)
+	if entryIdError != nil {
+		err := fmt.Errorf("(parseXrangeCommand) Can't decode end entry id %s: %e", endEntryId, entryIdError)
 		utils.Log(err.Error())
 		return xRangeCommand, err
 	}
