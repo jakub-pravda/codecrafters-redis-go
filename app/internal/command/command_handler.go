@@ -11,38 +11,42 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
-type CommandHandler interface {
-	Process() (respparser.RespContent, error)
+type CommandHandler[T any] interface {
+	Process() (respparser.RespData, error)
 }
 
-func (c EchoCommand) Process() (respparser.RespContent, error) {
-	resp := respparser.RespContent{
-		Value:    c.Message,
-		DataType: respparser.BulkString,
+func (c EchoCommand) Process() (respparser.RespData, error) {
+	resp := respparser.BulkString{
+		Value: c.Message,
 	}
 	return resp, nil
 }
 
-func (c PingCommand) Process() (respparser.RespContent, error) {
-	pong := respparser.RespContent{
-		Value:    "PONG",
-		DataType: respparser.SimpleString,
+func (c PingCommand) Process() (respparser.RespData, error) {
+	pong := respparser.SimpleString{
+		Value: "PONG",
 	}
 	return pong, nil
 }
 
-func (c GetCommand) Process() (respparser.RespContent, error) {
+func (c GetCommand) Process() (respparser.RespData, error) {
 	get, found := keyvaluestore.Get(c.Key)
+	var resp respparser.BulkString
 
-	resp := respparser.RespContent{
-		Value:    get.Value,
-		DataType: respparser.BulkString,
-		IsEmpty:  !found,
+	if found {
+		resp = respparser.BulkString{
+			Value: get.Value,
+		}
+	} else {
+		resp = respparser.BulkString{
+			Value:  get.Value,
+			IsNull: true,
+		}
 	}
 	return resp, nil
 }
 
-func (c SetCommand) Process() (respparser.RespContent, error) {
+func (c SetCommand) Process() (respparser.RespData, error) {
 	keyStoreValue := keyvaluestore.KeyStoreValue{
 		InsertedDatetime: time.Now(),
 	}
@@ -57,34 +61,31 @@ func (c SetCommand) Process() (respparser.RespContent, error) {
 	return okResponse, nil
 }
 
-func (c TypeCommand) Process() (respparser.RespContent, error) {
+func (c TypeCommand) Process() (respparser.RespData, error) {
 
 	_, foundInKv := keyvaluestore.Get(c.Key)
 	if foundInKv {
-		resp := respparser.RespContent{
-			Value:    "string",
-			DataType: respparser.SimpleString,
+		resp := respparser.SimpleString{
+			Value: "string",
 		}
 		return resp, nil
 	}
 
 	_, foundInStream := streamstore.GetTopItem(c.Key)
 	if foundInStream {
-		resp := respparser.RespContent{
-			Value:    "stream",
-			DataType: respparser.SimpleString,
+		resp := respparser.SimpleString{
+			Value: "stream",
 		}
 		return resp, nil
 	}
 
-	resp := respparser.RespContent{
-		Value:    "none",
-		DataType: respparser.SimpleString,
+	resp := respparser.SimpleString{
+		Value: "none",
 	}
 	return resp, nil
 }
 
-func (c XaddCommand) Process() (respparser.RespContent, error) {
+func (c XAddCommand) Process() (respparser.RespData, error) {
 	millisecondsTime := c.EntryIdMillisecondsTime
 	sequenceNumber := c.EntryIdSequenceNumber
 
@@ -112,22 +113,54 @@ func (c XaddCommand) Process() (respparser.RespContent, error) {
 		StreamKey:               c.StreamKey,
 		EntryIdMillisecondsTime: millisecondsTime,
 		EntryIdSequenceNumber:   sequenceNumber,
-		FieldValues:             c.FieldValues,
+		StreamValues:            c.FieldValues,
 		InsertedDatetime:        time.Now(),
 	}
 
 	if err := validateEntryId(streamValue, &topItem, topItemFound); err != nil {
 		utils.Log(fmt.Sprintf("(XADD cmd) EntryId validation failed: %e)", err))
-		return respparser.RespContent{}, err
+		return respparser.BulkString{}, err
 	}
 
 	streamstore.Append(streamValue)
-	resp := respparser.RespContent{
-		Value:    fmt.Sprintf("%d-%d", millisecondsTime, sequenceNumber),
-		DataType: respparser.BulkString,
+	resp := respparser.BulkString{
+		Value: fmt.Sprintf("%d-%d", millisecondsTime, sequenceNumber),
 	}
 
 	return resp, nil
+}
+
+func (c XRangeCommand) Process() (respparser.RespData, error) {
+	items, found := streamstore.GetItems(c.StreamKey, c.StartMillisecondsTime, c.EndMillisecondsTime, c.StartSequenceNumber, c.EndSequenceNumber)
+	if !found {
+		// stream not found
+		utils.Log(fmt.Sprintf("(XRangeCommand) Stream %s not found", c.StreamKey))
+		return respparser.Array{}, nil
+	}
+
+	result := respparser.Array{}
+	for _, i := range items {
+
+		// id
+		id := respparser.BulkString{
+			Value: i.StreamId(),
+		}
+		// values
+		values := respparser.Array{}
+		for k, v := range i.StreamValues {
+			bulkKey := respparser.BulkString{
+				Value: k,
+			}
+			bulkValue := respparser.BulkString{
+				Value: v,
+			}
+			values.Items = append(values.Items, bulkKey, bulkValue)
+		}
+
+		result.Items = append(result.Items, respparser.Array{Items: []respparser.RespData{id, values}})
+	}
+
+	return result, nil
 }
 
 func validateEntryId(s streamstore.RedisStream, topItem *streamstore.RedisStream, topItemFound bool) error {

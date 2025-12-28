@@ -1,11 +1,13 @@
 package respparser
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
-	"regexp"
+	"io"
 	"strconv"
+	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
@@ -13,221 +15,348 @@ import (
 type RespDataType byte
 
 const (
-	Array        RespDataType = '*'
-	BulkString   RespDataType = '$'
-	Integer      RespDataType = ':'
-	SimpleError  RespDataType = '-'
-	SimpleString RespDataType = '+'
+	TypeArray        RespDataType = '*'
+	TypeBulkString   RespDataType = '$'
+	TypeInteger      RespDataType = ':'
+	TypeSimpleError  RespDataType = '-'
+	TypeSimpleString RespDataType = '+'
 )
 
-type RespContent struct {
-	Value    string
-	DataType RespDataType
-	IsEmpty  bool
+type RespData interface {
+	Type() RespDataType
+	String() string
+	DebugString() string
+}
+
+type SimpleString struct {
+	Value string
+}
+
+func (s SimpleString) Type() RespDataType  { return TypeSimpleString }
+func (s SimpleString) String() string      { return s.Value }
+func (s SimpleString) DebugString() string { return fmt.Sprintf("Simple string: %s", s.Value) }
+
+type Integer struct {
+	Value int
+}
+
+func (s Integer) Type() RespDataType { return TypeInteger }
+func (s Integer) String() string     { return strconv.Itoa(s.Value) }
+func (s Integer) DebugString() string {
+	numStr := strconv.Itoa(s.Value)
+	return fmt.Sprintf("Integer: %s", numStr)
+}
+
+type SimpleError struct {
+	Value string
+}
+
+func (s SimpleError) Type() RespDataType { return TypeSimpleError }
+func (s SimpleError) String() string     { return s.Value }
+func (s SimpleError) DebugString() string {
+	return fmt.Sprintf("Simple error: %s", s.Value)
+}
+
+type BulkString struct {
+	Value  string
+	IsNull bool
+}
+
+func (s BulkString) Type() RespDataType { return TypeBulkString }
+func (s BulkString) String() string     { return s.Value }
+func (s BulkString) DebugString() string {
+	return fmt.Sprintf("Bulk string: %s", s.Value)
+}
+
+type Array struct {
+	Items []RespData
+}
+
+func (a Array) Type() RespDataType { return TypeArray }
+func (a Array) String() string {
+	itemsString := make([]string, len(a.Items))
+	for n, respData := range a.Items {
+		itemsString[n] = respData.String()
+	}
+	return fmt.Sprintf("[%s]", strings.Join(itemsString, ","))
+}
+func (a Array) DebugString() string {
+	itemsString := make([]string, len(a.Items))
+	for n, respData := range a.Items {
+		itemsString[n] = respData.String()
+	}
+	return fmt.Sprintf("Array: [%s]", strings.Join(itemsString, ","))
+}
+
+func Serialize(data RespData) ([]byte, error) {
+
+	switch d := data.(type) {
+	case Array:
+		b, err := SerializeArray(d)
+		if err != nil {
+			utils.Log(fmt.Sprintf("(RESP Serialize) Array serialization error %s", err.Error()))
+			return []byte{}, err
+		} else {
+			return b, nil
+		}
+	case BulkString:
+		return SerializeBulkString(d), nil
+	case Integer:
+		return SerializeInteger(d), nil
+	case SimpleString:
+		return SerializeSimpleString(d), nil
+	case SimpleError:
+		return SerializeSimpleError(d), nil
+	default:
+		err := errors.New("(RESP Serialize) Unsupported resp data type")
+		return []byte{}, err
+	}
+}
+
+func SerializeArray(r Array) ([]byte, error) {
+	var buf bytes.Buffer
+	arrayLengthString := strconv.Itoa(len(r.Items))
+
+	// array definition
+	buf.WriteByte(byte(TypeArray))
+	buf.WriteString(arrayLengthString)
+	buf.WriteString(string(respSeparator))
+
+	for _, respData := range r.Items {
+		serialized, err := Serialize(respData)
+		if err != nil {
+			utils.Log(fmt.Sprintf("(SerializeArray) Serialization error %s", err.Error()))
+			return []byte{}, err
+		}
+		buf.Write(serialized)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func SerializeBulkString(r BulkString) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(byte(TypeBulkString))
+	
+	if r.IsNull {
+		buf.WriteString("-1")
+		buf.WriteString(string(respSeparator))
+		return buf.Bytes()
+	}
+
+	bulkLengthString := strconv.Itoa(len(r.Value))
+
+	// bulk string definition
+	buf.WriteString(bulkLengthString)
+	buf.WriteString(string(respSeparator))
+
+	// bulk string value
+	buf.WriteString(r.Value)
+	buf.WriteString(string(respSeparator))
+
+	return buf.Bytes()
+}
+
+func SerializeInteger(r Integer) []byte {
+	var buf bytes.Buffer
+	intString := strconv.Itoa(r.Value)
+
+	buf.WriteByte(byte(TypeInteger))
+	buf.WriteString(intString)
+	buf.WriteString(string(respSeparator))
+
+	return buf.Bytes()
+}
+
+func SerializeSimpleString(r SimpleString) []byte {
+	var buf bytes.Buffer
+
+	buf.WriteByte(byte(TypeSimpleString))
+	buf.WriteString(r.Value)
+	buf.WriteString(string(respSeparator))
+
+	return buf.Bytes()
+}
+
+func SerializeSimpleError(r SimpleError) []byte {
+	var buf bytes.Buffer
+
+	buf.WriteByte(byte(TypeSimpleError))
+	buf.WriteString(r.Value)
+	buf.WriteString(string(respSeparator))
+
+	return buf.Bytes()
 }
 
 var respSeparator = []byte("\r\n")
-var respNil = append([]byte("$-1"), respSeparator...)
 
-func dataTypeDefinition(respContent []byte) *RespDataType {
-	arrayRe := regexp.MustCompile(`^\*\d+$`)
-	if arrayRe.Match(respContent) {
-		result := Array
-		return &result
-	}
-
-	bulkStringRe := regexp.MustCompile(`^\$\d+$`)
-	if bulkStringRe.Match(respContent) {
-		result := BulkString
-		return &result
-	}
-
-	integerRe := regexp.MustCompile(`^\:\d+$`)
-	if integerRe.Match(respContent) {
-		result := Integer
-		return &result
-	}
-
-	return nil
-}
-
-type DataContentHeader []byte
-type DataContentTail [][]byte
-
-// nextDataContent returns next content (head) and the rest of the command (tail)
-func nextDataContent(content [][]byte) (DataContentHeader, DataContentTail, *RespDataType) {
-	utils.Log(fmt.Sprintf("(Data content iterator) input: %v", content))
-	var head []byte
-	var tail [][]byte
-
-	if len(content) == 0 {
-		return nil, nil, nil
-	} else if len(content) == 1 { // TODO refactor, don't like it
-		head, tail = content[0], nil // empty array
-	} else {
-		head, tail = content[0], content[1:]
-	}
-
-	utils.Log(fmt.Sprintf("(Data content iterator) head: %s", head))
-	utils.Log(fmt.Sprintf("(Data content iterator) tail: %s", tail))
-
-	nextDataType := dataTypeDefinition(head)
-	return head, tail, nextDataType
-}
-
-func getNumberOfArrayElements(arrayType []byte) (int, error) {
-	if len(arrayType) == 0 || arrayType[0] != byte(Array) {
-		return 0, errors.New("Not an array type")
-	}
-
-	numOfElements, err := strconv.Atoi(string(arrayType[1:]))
+func Deserialize(r *bufio.Reader) (RespData, error) {
+	dataType, err := r.Peek(1)
 	if err != nil {
-		return 0, errors.New("Array length must be an integer")
-	}
-	return numOfElements, err
-}
-
-func ParseArray(cmd []byte) ([]RespContent, error) {
-	// check array
-
-	arraySplit := bytes.Split(cmd, respSeparator)
-	arrayId, arrayData, dataType := nextDataContent(arraySplit)
-	if dataType == nil || *dataType != Array {
-		return nil, errors.New("Not an array")
+		utils.Log(fmt.Sprintf("(Deserialize) Read buffer peek error %s", err.Error()))
+		return SimpleError{}, err
 	}
 
-	numOfElements, err := getNumberOfArrayElements(arrayId)
-	if err != nil {
-		return nil, fmt.Errorf("Error occurs during array parsing: %s", err.Error())
-	} else if numOfElements == 0 {
-		// empty array
-		return []RespContent{}, nil
-	}
-
-	respContent := make([]RespContent, 0)
-	nextIter := arrayData[:len(arrayData)-1] // drop last separator (empty byte)
-
-	for len(nextIter) > 0 {
-		next, tail, dataType := nextDataContent(nextIter)
-		utils.Log(fmt.Sprintf("(Array parser) next element: %s", next))
-		if dataType != nil && *dataType == BulkString {
-			// Ge bulk string string content and join
-			bulkStringSize := next
-			bulkStringContent := tail[0]
-
-			// Create valid bulk string (according to resp definition)
-			bulkString := bytes.Join([][]byte{bulkStringSize, bulkStringContent}, respSeparator)
-			bulkString = append(bulkString, respSeparator...)
-
-			decodedBulkString, err := decodeBulkString(bulkString)
-			if err != nil {
-				return nil, fmt.Errorf("Can't parse bulk string: %s", err.Error())
-			}
-			utils.Log(fmt.Sprintf("(Array parser) Appending resp content (bulk string): %v", *decodedBulkString))
-			respContent = append(respContent, *decodedBulkString)
-			nextIter = tail[1:]
+	switch dataType[0] {
+	case byte(TypeSimpleString):
+		s, err := DeserializeSimpleString(r)
+		if err != nil {
+			return SimpleString{}, err
 		} else {
-			return nil, errors.New("Unsupported resp data type")
+			return s, nil
 		}
-	}
-
-	if numOfElements != len(respContent) {
-		return nil, fmt.Errorf("Parse resp content has different length (%d) than expected (%d)", numOfElements, len(respContent))
-	} else {
-		return respContent, nil
-	}
-}
-
-// ** BULK STRING ***
-
-func encodeBulkString(content RespContent) []byte {
-	if content.DataType != BulkString {
-		return nil
-	}
-
-	lenBytes := []byte(strconv.Itoa(len(content.Value)))
-	stringSize := append([]byte{byte(BulkString)}, lenBytes...)
-
-	stringContent := []byte(content.Value)
-
-	totalLen := len(stringSize) + len(respSeparator) + len(stringContent) + len(respSeparator)
-	result := make([]byte, 0, totalLen)
-
-	result = append(result, stringSize...)
-	result = append(result, respSeparator...)
-	result = append(result, stringContent...)
-	result = append(result, respSeparator...)
-
-	return result
-}
-
-func decodeBulkString(bulkString []byte) (*RespContent, error) {
-	// bulk string example: $<length>\r\n<data>\r\n
-	utils.Log(fmt.Sprintf("(Bulk parser) input: %s", bulkString))
-	if bulkString[0] != byte(BulkString) {
-		return nil, errors.New("Not a bulk string")
-	}
-
-	splitBulkString := bytes.Split(bulkString, respSeparator)
-	if len(splitBulkString) != 3 {
-		// 3 elements are expected as golang splits $<length>\r\n<data>\r\n string into 3 parts
-		return nil, fmt.Errorf("Not a valid bulk string length, expected 3, got %d", len(splitBulkString))
-	}
-
-	bulkStringSize := splitBulkString[0]
-	bulkStringContent := splitBulkString[1]
-
-	utils.Log(fmt.Sprintf("(Bulk parser) size part: %s", bulkStringSize))
-	utils.Log(fmt.Sprintf("(Bulk parser) data part: %s", bulkStringContent))
-
-	stringSize, err := strconv.Atoi(string(bulkStringSize[1:])) // remove data type prefix
-	if err != nil {
-		return nil, errors.New("Can't parse string length")
-	}
-
-	stringContent := string(bulkStringContent)
-	if len(stringContent) != stringSize {
-		return nil, fmt.Errorf("Parsed content length (%d) not equal to bulk string content length (%d)", len(stringContent), stringSize)
-	}
-
-	respContent := RespContent{
-		Value:    stringContent,
-		DataType: BulkString,
-	}
-
-	return &respContent, nil
-}
-
-// ** SIMPLE STRINGS ***
-
-func encodeSimpleString(s string) []byte {
-	result := append([]byte{byte(SimpleString)}, []byte(s)...)
-	result = append(result, respSeparator...)
-
-	return result
-}
-
-func encodeSimpleError(errorMessage string) []byte {
-	result := append([]byte{byte(SimpleError)}, []byte(errorMessage)...)
-	result = append(result, respSeparator...)
-
-	return result
-}
-
-// ** content ***
-func EncodeRespContent(content RespContent) []byte {
-	if content.IsEmpty {
-		return respNil
-	}
-
-	switch content.DataType {
-	case BulkString:
-		return encodeBulkString(content)
-	case SimpleString:
-		return encodeSimpleString(content.Value)
-	case SimpleError:
-		return encodeSimpleError(content.Value)
+	case byte(TypeInteger):
+		i, err := DeserializeInteger(r)
+		if err != nil {
+			return Integer{}, err
+		} else {
+			return i, nil
+		}
+	case byte(TypeSimpleError):
+		e, err := DeserializeSimpleError(r)
+		if err != nil {
+			return SimpleError{}, err
+		} else {
+			return e, nil
+		}
+	case byte(TypeBulkString):
+		b, err := DeserializeBulkString(r)
+		if err != nil {
+			return BulkString{}, err
+		} else {
+			return b, nil
+		}
+	case byte(TypeArray):
+		a, err := DeserializeArray(r)
+		if err != nil {
+			return BulkString{}, err
+		} else {
+			return a, nil
+		}
 	default:
-		return respNil
+		err := errors.New("(RESP Deserialize) Unsupported deserializer")
+		return SimpleError{}, err
 	}
+}
+
+func DeserializeArray(r *bufio.Reader) (Array, error) {
+	nextLine, _, err := r.ReadLine()
+
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeArray) Next line read error %s", err.Error()))
+		return Array{}, nil
+	} else if nextLine[0] != byte(TypeArray) {
+		return Array{}, errors.New("Not an array")
+	}
+
+	numOfElements, err := strconv.Atoi(string(nextLine[1:]))
+	if err != nil {
+		return Array{}, errors.New("Array length must be an integer")
+	}
+
+	array := Array{
+		Items: make([]RespData, numOfElements),
+	}
+
+	if numOfElements == 0 {
+		return array, nil
+	}
+
+	for n := range numOfElements {
+		respData, err := Deserialize(r)
+		if err != nil {
+			if err == io.EOF {
+				msg := "(DeserializeArray) EOF detected before iterating through number of expected items"
+				incompleteErr := errors.New(msg)
+				utils.Log(msg)
+				return array, incompleteErr
+			} else {
+				utils.Log(fmt.Sprintf("(DeserializeArray) Deserialization ends with error error %s", err.Error()))
+				return array, err
+			}
+		}
+		utils.Log(fmt.Sprintf("(DeserializeArray) Array item deserialized %v", respData))
+		array.Items[n] = respData
+	}
+	return array, nil
+}
+
+func DeserializeBulkString(r *bufio.Reader) (BulkString, error) {
+	nextLine, _, err := r.ReadLine()
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeBulkString) Next line read error %s", err.Error()))
+		return BulkString{}, nil
+	} else if nextLine[0] != byte(TypeBulkString) {
+		return BulkString{}, errors.New("Not a bulk string")
+	}
+
+	bulkStringLength, err := strconv.Atoi(string(nextLine[1:]))
+	if err != nil {
+		return BulkString{}, errors.New("Bulk string length must be an integer")
+	}
+
+	if bulkStringLength == 0 {
+		return BulkString{}, nil
+	}
+
+	// bulk string content
+	nextLine, _, err = r.ReadLine()
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeBulkString) Next line read error %s", err.Error()))
+		return BulkString{}, nil
+	}
+
+	if len(nextLine) != bulkStringLength {
+		err := fmt.Errorf("(DeserializeBulkString) Bulk string length check failed. Expected: %d, got: %d", bulkStringLength, len(nextLine))
+		utils.Log(err.Error())
+
+		return BulkString{}, err
+	}
+
+	return BulkString{
+		Value: string(nextLine),
+	}, nil
+}
+
+func DeserializeInteger(r *bufio.Reader) (Integer, error) {
+	nextLine, _, err := r.ReadLine()
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeInteger) Next line read error %s", err.Error()))
+		return Integer{}, nil
+	} else if nextLine[0] != byte(TypeInteger) {
+		return Integer{}, errors.New("Not an integer")
+	}
+
+	intValue, err := strconv.Atoi(string(nextLine[1:]))
+	if err != nil {
+		return Integer{}, errors.New("Integer must be an valid number")
+	}
+
+	return Integer{Value: intValue}, nil
+}
+
+func DeserializeSimpleString(r *bufio.Reader) (SimpleString, error) {
+	nextLine, _, err := r.ReadLine()
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeSimpleString) Next line read error %s", err.Error()))
+		return SimpleString{}, nil
+	} else if nextLine[0] != byte(TypeSimpleString) {
+		return SimpleString{}, errors.New("Not a simple string")
+	}
+
+	simpleString := string(nextLine[1:])
+	return SimpleString{Value: simpleString}, nil
+}
+
+func DeserializeSimpleError(r *bufio.Reader) (SimpleError, error) {
+	nextLine, _, err := r.ReadLine()
+	if err != nil {
+		utils.Log(fmt.Sprintf("(DeserializeSimpleError) Next line read error %s", err.Error()))
+		return SimpleError{}, nil
+	} else if nextLine[0] != byte(TypeSimpleError) {
+		return SimpleError{}, errors.New("Not a simple error")
+	}
+
+	simpleError := string(nextLine[1:])
+	return SimpleError{Value: simpleError}, nil
 }

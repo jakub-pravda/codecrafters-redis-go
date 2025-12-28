@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io"
 	"net"
 	"os"
 
@@ -51,8 +51,8 @@ func main() {
 	}
 }
 
-func handleCommandRequest(requestCommands []byte) command.CommandResponse {
-	cmd, err := command.ParseCommand(requestCommands) // TODO err handling
+func handleCommandRequest(r *bufio.Reader) command.CommandResponse {
+	cmd, err := command.ParseCommand(r) // TODO err handling
 	if err != nil {
 		return command.ErrorResponse(err)
 	}
@@ -69,7 +69,7 @@ func handleCommandRequest(requestCommands []byte) command.CommandResponse {
 		return command.ErrorResponse(err)
 	}
 
-	utils.Log(fmt.Sprintf("(Request handler) Command %s result: %s", cmd.CommandType, cmdResponse.Value))
+	utils.Log(fmt.Sprintf("(Request handler) Command %s result: %s", cmd.CommandType, cmdResponse.String()))
 
 	response := command.CommandResponse{
 		Value: cmdResponse,
@@ -81,32 +81,31 @@ func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 	defer conn.Close()
 
 	for {
-		buf := make([]byte, 1024)
-		n, readErr := conn.Read(buf)
-		if readErr != nil {
-			if readErr == io.EOF {
-				utils.Log("(Connection handler) EOF detected. Closing connection")
-				break
-			} else {
-				utils.Log(fmt.Sprintf("(Connection handler) Error reading client: %s", readErr.Error()))
-				break
-			}
+		commandReader := bufio.NewReader(conn)
+		commandDataType, err := commandReader.Peek(1)
+		if err != nil {
+			utils.Log("(Connection handler) Can't read data from incomming connection")
+			break
 		}
 
-		command := buf[:n]
-
-		utils.Log(fmt.Sprintf("(Connection handler) Recieved data: %s", command))
-		utils.Log(fmt.Sprintf("(Connection handler) Recieved data (str): %s", string(command)))
+		utils.Log(fmt.Sprintf("(Connection handler) Recieved new data with type: %v", commandDataType))
 
 		eventloop.Add(eventLoop, &eventloop.Task{
 			// TODO split command processing and client write
 			MainTask: func() {
-				cmdResult := handleCommandRequest(command)
+				cmdResult := handleCommandRequest(commandReader)
 				utils.Log(fmt.Sprintf("(Connection handler) Sending response: %v", cmdResult.Value))
-				encodedResp := respparser.EncodeRespContent(cmdResult.Value)
+
+				encodedResp, serializationErr := respparser.Serialize(cmdResult.Value)
+				if serializationErr != nil {
+					utils.Log(fmt.Sprintf("(Connection handler) Error writing client: %s", serializationErr.Error()))
+					// TODO return error!
+				}
+
 				_, writeErr := conn.Write(encodedResp)
 				if writeErr != nil {
 					utils.Log(fmt.Sprintf("(Connection handler) Error writing client: %s", writeErr.Error()))
+					// TODO return error!
 				}
 			},
 			IsBlocking: true,
