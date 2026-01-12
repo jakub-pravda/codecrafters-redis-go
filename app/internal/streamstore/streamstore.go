@@ -7,6 +7,7 @@ import (
 
 	"math"
 
+	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
@@ -25,6 +26,33 @@ type RedisStream struct {
 	EntryIdSequenceNumber   int
 	StreamValues            map[string]string
 	InsertedDatetime        time.Time
+}
+
+func (s RedisStream) ToRespArray() respparser.Array {
+	// create key - value arrays
+	keyValues := []respparser.RespData{}
+	for k, v := range s.StreamValues {
+		keyValue := respparser.Array{
+			Items: []respparser.RespData{
+				respparser.BulkString{
+					Value: k,
+				},
+				respparser.BulkString{
+					Value: v,
+				},
+			},
+		}
+		keyValues = append(keyValues, keyValue)
+	}
+
+	streamIdArray := respparser.Array{
+		Items: append([]respparser.RespData{
+			respparser.BulkString{
+				Value: s.StreamId(),
+			},
+		}, keyValues...),
+	}
+	return streamIdArray
 }
 
 func (s RedisStream) StreamId() string {
@@ -73,7 +101,7 @@ func GetItems(streamKey string, startMillis int64, endMillis int64, startSequenc
 	}
 
 	for _, s := range stream {
-		utils.Log(fmt.Sprintf("(StreamStoreValue) Iterating %s", s.StreamId()))
+		utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItems) Iterating %s", s.StreamId()))
 
 		// Skip entries outside the time range
 		if s.EntryIdMillisecondsTime < startMillis || s.EntryIdMillisecondsTime > endMillis {
@@ -98,4 +126,20 @@ func GetItems(streamKey string, startMillis int64, endMillis int64, startSequenc
 	}
 
 	return result, true
+}
+
+func GetItemsByFilter(streamKey string, filter func(i []RedisStream) []RedisStream) ([]RedisStream, bool) {
+	var result []RedisStream
+	stream, found := streamStore[streamKey]
+	utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItemsByFilter) GetItems: StreamKey = %s, found = %t", streamKey, found))
+	if (!found) || len(stream) < 1 {
+		return result, false
+	}
+
+	filteredStream := filter(stream)
+	if len(filteredStream) > 0 {
+		return filteredStream, true
+	} else {
+		return nil, false
+	}
 }

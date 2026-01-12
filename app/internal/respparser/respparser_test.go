@@ -38,11 +38,11 @@ func TestDecodeBulkStrings(t *testing.T) {
 			r := bufio.NewReader(bytes.NewReader(tt.input))
 			ans, err := DeserializeBulkString(r)
 			if err != nil {
-				t.Errorf("result expected, but err got: %s", err.Error())
+				t.Errorf("ERROR result expected, but err got: %s", err.Error())
 			}
 
 			if ans.Value != tt.want.Value {
-				t.Errorf("got %v, want %v", ans, tt.want)
+				t.Errorf("ERROR got %v, want %v", ans, tt.want)
 			}
 		})
 	}
@@ -75,11 +75,11 @@ func TestEncodeBulkStrings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ans, err := Serialize(tt.input)
 			if err != nil {
-				t.Errorf("result expected, but err got: %s", err.Error())
+				t.Errorf("ERROR result expected, but err got: %s", err.Error())
 			}
 
 			if !bytes.Equal(ans, tt.want) {
-				t.Errorf("got %v, want %v", string(ans), string(tt.want))
+				t.Errorf("ERROR got %v, want %v", string(ans), string(tt.want))
 			}
 		})
 	}
@@ -103,10 +103,10 @@ func TestEncodeSimpleStrings(t *testing.T) {
 			utils.Log(fmt.Sprintf("*** Running test: %s***", tt.name))
 			ans, err := Serialize(tt.input)
 			if err != nil {
-				t.Errorf("result expected, but err got: %s", err.Error())
+				t.Errorf("ERROR result expected, but err got: %s", err.Error())
 			}
 			if !bytes.Equal(ans, tt.want) {
-				t.Errorf("got %v, want %v", ans, tt.want)
+				t.Errorf("ERROR got %v, want %v", ans, tt.want)
 			}
 		})
 	}
@@ -186,11 +186,11 @@ func TestDeserializeArray(t *testing.T) {
 			r := bufio.NewReader(bytes.NewReader(tt.input))
 			ans, err := DeserializeArray(r)
 			if err != nil {
-				t.Errorf("result expected, but err got: %s", err.Error())
+				t.Errorf("ERROR result expected, but err got: %s", err.Error())
 			}
 			utils.Log(fmt.Sprintf("(TEST) Array deserialize result %v", ans.String()))
 			if ans.String() != tt.want.String() {
-				t.Errorf("got %v, want %v", ans.String(), tt.want.String())
+				t.Errorf("ERROR got %v, want %v", ans.String(), tt.want.String())
 			}
 		})
 	}
@@ -245,12 +245,12 @@ func TestSerializeArray(t *testing.T) {
 			utils.Log(fmt.Sprintf("*** Running test: %s***", tt.name))
 			ans, err := SerializeArray(tt.input)
 			if err != nil {
-				t.Errorf("result expected, but err got: %s", err.Error())
+				t.Errorf("ERROR result expected, but err got: %s", err.Error())
 			}
 
 			utils.Log(fmt.Sprintf("(TEST) Array serialize result %v", string(ans)))
 			if !bytes.Equal(ans, tt.want) {
-				t.Errorf("got %v, want %v", string(ans), string(tt.want))
+				t.Errorf("ERROR got %v, want %v", string(ans), string(tt.want))
 			}
 		})
 	}

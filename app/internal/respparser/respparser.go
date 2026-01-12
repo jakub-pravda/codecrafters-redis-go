@@ -307,7 +307,7 @@ func DeserializeBulkString(r *bufio.Reader) (BulkString, error) {
 	}
 
 	if len(nextLine) != bulkStringLength {
-		err := fmt.Errorf("(DeserializeBulkString) Bulk string length check failed. Expected: %d, got: %d", bulkStringLength, len(nextLine))
+		err := fmt.Errorf("ERROR (DeserializeBulkString) Bulk string length check failed. Expected: %d, got: %d", bulkStringLength, len(nextLine))
 		utils.Log(err.Error())
 
 		return BulkString{}, err
