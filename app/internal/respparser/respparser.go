@@ -69,7 +69,8 @@ func (s BulkString) DebugString() string {
 }
 
 type Array struct {
-	Items []RespData
+	Items  []RespData
+	IsNull bool
 }
 
 func (a Array) Type() RespDataType { return TypeArray }
@@ -119,6 +120,13 @@ func SerializeArray(r Array) ([]byte, error) {
 
 	// array definition
 	buf.WriteByte(byte(TypeArray))
+
+	if r.IsNull {
+		buf.WriteString("-1")
+		buf.WriteString(string(respSeparator))
+		return buf.Bytes(), nil
+	}
+
 	buf.WriteString(arrayLengthString)
 	buf.WriteString(string(respSeparator))
 

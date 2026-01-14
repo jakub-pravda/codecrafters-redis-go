@@ -1,6 +1,7 @@
 package streamstore
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -142,4 +143,30 @@ func GetItemsByFilter(streamKey string, filter func(i []RedisStream) []RedisStre
 	} else {
 		return nil, false
 	}
+}
+
+func GetItemsByFilterChan(streamKey string, filter func(i []RedisStream) []RedisStream, ctx context.Context) <-chan []RedisStream {
+	resultChannel := make(chan []RedisStream, 1)
+	utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItemsByFilterChan) GetItems: StreamKey = %s", streamKey))
+
+	go func() {
+		defer close(resultChannel)
+
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItemsByFilterChan) GetItems: StreamKey = %s, timeout", streamKey))
+				return
+			default:
+				result, found := GetItemsByFilter(streamKey, filter)
+				if found {
+					utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItemsByFilterChan) GetItems: StreamKey = %s, result size: %d", streamKey, len(result)))
+					resultChannel <- result
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+	}()
+	return resultChannel
 }

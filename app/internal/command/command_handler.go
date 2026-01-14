@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -188,6 +189,22 @@ func (c XReadCommand) Process() (respparser.RespData, error) {
 
 		result, found := streamstore.GetItemsByFilter(streamKey, streamFilter)
 
+		if !found && c.IsBlocking {
+			// blocking, wait for result
+			utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for %d milliseconds", streamKey, c.BlockMillis))
+			ctx, _ := context.WithTimeout(context.Background(), time.Duration(c.BlockMillis)*time.Millisecond) // TODO cancel
+			recChan := streamstore.GetItemsByFilterChan(streamKey, streamFilter, ctx)
+			chanRes, chanOk := <-recChan
+			if !chanOk {
+				// remark: when timeout occurs, nil array is returned
+				nilArray := respparser.Array{IsNull: true}
+				return nilArray, nil
+			} else {
+				result = chanRes
+				found = len(chanRes) > 0
+			}
+		}
+
 		if !found {
 			utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found", streamKey))
 			continue
@@ -212,7 +229,7 @@ func (c XReadCommand) Process() (respparser.RespData, error) {
 		Items: streams,
 	}
 
-	utils.Log(fmt.Sprintf("(XReadCommand) Return %v not found", resultArray))
+	utils.Log(fmt.Sprintf("(XReadCommand) Return %v", resultArray))
 	return resultArray, nil
 }
 
