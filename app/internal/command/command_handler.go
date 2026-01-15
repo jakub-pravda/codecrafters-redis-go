@@ -1,5 +1,7 @@
 package command
 
+// TODO split by each command
+
 import (
 	"context"
 	"errors"
@@ -190,9 +192,19 @@ func (c XReadCommand) Process() (respparser.RespData, error) {
 		result, found := streamstore.GetItemsByFilter(streamKey, streamFilter)
 
 		if !found && c.IsBlocking {
-			// blocking, wait for result
-			utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for %d milliseconds", streamKey, c.BlockMillis))
-			ctx, _ := context.WithTimeout(context.Background(), time.Duration(c.BlockMillis)*time.Millisecond) // TODO cancel
+			var ctx context.Context
+			var cancel context.CancelFunc
+			if c.BlockMillis <= 0 {
+				// blocking read indefinitely
+				utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for response", streamKey))
+				ctx, cancel = context.WithCancel(context.Background())
+			} else {
+				// blocking reads with timeout
+				utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for %d milliseconds for response", streamKey, c.BlockMillis))
+				ctx, cancel = context.WithTimeout(context.Background(), time.Duration(c.BlockMillis)*time.Millisecond)
+			}
+			defer cancel()
+
 			recChan := streamstore.GetItemsByFilterChan(streamKey, streamFilter, ctx)
 			chanRes, chanOk := <-recChan
 			if !chanOk {

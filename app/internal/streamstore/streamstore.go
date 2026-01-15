@@ -14,6 +14,7 @@ import (
 
 type StreamStore map[string][]RedisStream
 
+// TODO implement locks
 var streamStore = make(StreamStore)
 
 // streamKey ->
@@ -78,7 +79,6 @@ func Append(value RedisStream) {
 }
 
 func GetTopItem(streamKey string) (RedisStream, bool) {
-	// TODO get stream implementation
 	stream, found := streamStore[streamKey]
 	utils.Log(fmt.Sprintf("(StreamStoreValue) Get: StreamKey = %s, found = %t", streamKey, found))
 	if (!found) || len(stream) < 1 {
