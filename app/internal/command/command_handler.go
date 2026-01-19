@@ -3,7 +3,6 @@ package command
 // TODO split by each command
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -125,7 +124,10 @@ func (c XAddCommand) Process() (respparser.RespData, error) {
 		return respparser.BulkString{}, err
 	}
 
-	streamstore.Append(streamValue)
+	storeChannel := streamstore.GetStreamStoreChannel()
+	utils.Log(fmt.Sprintf("(XADD cmd) Sending record using channel: %v)", streamValue))
+	storeChannel <- streamValue
+
 	resp := respparser.BulkString{
 		Value: fmt.Sprintf("%d-%d", millisecondsTime, sequenceNumber),
 	}
@@ -164,85 +166,6 @@ func (c XRangeCommand) Process() (respparser.RespData, error) {
 	}
 
 	return result, nil
-}
-
-func (c XReadCommand) Process() (respparser.RespData, error) {
-	utils.Log("(XReadCommand) Processing XRead command")
-	streams := []respparser.RespData{}
-
-	for streamKey, entryId := range c.Streams.keysIds {
-
-		// Create stream filter for this use case
-		streamFilter := func(filter []streamstore.RedisStream) []streamstore.RedisStream {
-			// XREAD is exclusive - command retrieves records with ID greater than the specified ID
-			filtered := []streamstore.RedisStream{}
-
-			for _, e := range filter {
-				if e.EntryIdMillisecondsTime == entryId.MillisecondsTime && e.EntryIdSequenceNumber == entryId.SequenceNumber {
-					// exclusive search
-					continue
-				} else if e.EntryIdMillisecondsTime >= entryId.MillisecondsTime && e.EntryIdSequenceNumber >= entryId.SequenceNumber {
-					filtered = append(filtered, e)
-				}
-			}
-
-			return filtered
-		}
-
-		result, found := streamstore.GetItemsByFilter(streamKey, streamFilter)
-
-		if !found && c.IsBlocking {
-			var ctx context.Context
-			var cancel context.CancelFunc
-			if c.BlockMillis <= 0 {
-				// blocking read indefinitely
-				utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for response", streamKey))
-				ctx, cancel = context.WithCancel(context.Background())
-			} else {
-				// blocking reads with timeout
-				utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found, waiting for %d milliseconds for response", streamKey, c.BlockMillis))
-				ctx, cancel = context.WithTimeout(context.Background(), time.Duration(c.BlockMillis)*time.Millisecond)
-			}
-			defer cancel()
-
-			recChan := streamstore.GetItemsByFilterChan(streamKey, streamFilter, ctx)
-			chanRes, chanOk := <-recChan
-			if !chanOk {
-				// remark: when timeout occurs, nil array is returned
-				nilArray := respparser.Array{IsNull: true}
-				return nilArray, nil
-			} else {
-				result = chanRes
-				found = len(chanRes) > 0
-			}
-		}
-
-		if !found {
-			utils.Log(fmt.Sprintf("(XReadCommand) Stream with key %s not found", streamKey))
-			continue
-		}
-
-		streamData := make([]respparser.RespData, 0)
-		for _, redisStream := range result {
-			streamData = append(streamData, redisStream.ToRespArray())
-		}
-
-		stream := respparser.Array{
-			Items: []respparser.RespData{
-				respparser.BulkString{Value: streamKey},
-				respparser.Array{Items: streamData},
-			},
-		}
-		utils.Log(fmt.Sprintf("(XReadCommand) Appending stream with stream key %s to result", streamKey))
-		streams = append(streams, stream)
-	}
-
-	resultArray := respparser.Array{
-		Items: streams,
-	}
-
-	utils.Log(fmt.Sprintf("(XReadCommand) Return %v", resultArray))
-	return resultArray, nil
 }
 
 func validateEntryId(s streamstore.RedisStream, topItem *streamstore.RedisStream, topItemFound bool) error {

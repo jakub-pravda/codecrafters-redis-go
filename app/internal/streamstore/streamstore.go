@@ -14,8 +14,60 @@ import (
 
 type StreamStore map[string][]RedisStream
 
-// TODO implement locks
-var streamStore = make(StreamStore)
+var streamStoreChannel chan RedisStream
+var notificationChannel chan RedisStream
+var streamStore StreamStore
+
+func InitStreamStore() {
+	streamStoreChannel = make(chan RedisStream)
+	streamStore = make(StreamStore)
+}
+
+func StreamStoreListener() {
+	defer close(streamStoreChannel)
+
+	utils.Log("(StreamStoreListener) Starting listener")
+	if streamStoreChannel != nil {
+		for {
+			value, chanOk := <-streamStoreChannel
+
+			if notificationChannel != nil {
+				notificationChannel <- value
+			}
+
+			if !chanOk {
+				utils.Log("(StreamStoreListener) Channel closed")
+				break
+			}
+
+			stream, found := streamStore[value.StreamKey]
+
+			if found {
+				// update existing strem
+				utils.Log(fmt.Sprintf("(StreamStoreListener) Append: StreamKey = %s - appending to an existing stream", value.StreamKey))
+				appendStream := append(stream, value)
+				streamStore[value.StreamKey] = appendStream
+			} else {
+				// create new stream
+				utils.Log(fmt.Sprintf("(StreamStoreListener) Append: StreamKey = %s - creating a new stream", value.StreamKey))
+				streamStore[value.StreamKey] = []RedisStream{value}
+			}
+		}
+	}
+	utils.Log("(StreamStoreListener) Closing listener")
+}
+
+func GetStreamStoreChannel() chan<- RedisStream {
+	return streamStoreChannel
+}
+
+func GetStreamNotificationChannel() <-chan RedisStream {
+	// TODO refactor mutex?
+	if notificationChannel == nil {
+		notificationChannel = make(chan RedisStream)
+	}
+	return notificationChannel
+}
 
 // streamKey ->
 //   Entry1 (key value)
@@ -61,21 +113,6 @@ func (s RedisStream) StreamId() string {
 	millisStr := strconv.FormatInt(s.EntryIdMillisecondsTime, 10)
 	seqNumStr := strconv.Itoa(s.EntryIdSequenceNumber)
 	return fmt.Sprintf("%s-%s", millisStr, seqNumStr)
-}
-
-func Append(value RedisStream) {
-	stream, found := streamStore[value.StreamKey]
-
-	if found {
-		// update existing strem
-		utils.Log(fmt.Sprintf("(StreamStoreValue) Append: StreamKey = %s - appending to an existing stream", value.StreamKey))
-		appendStream := append(stream, value)
-		streamStore[value.StreamKey] = appendStream
-	} else {
-		// create new stream
-		utils.Log(fmt.Sprintf("(StreamStoreValue) Append: StreamKey = %s - creating a new stream", value.StreamKey))
-		streamStore[value.StreamKey] = []RedisStream{value}
-	}
 }
 
 func GetTopItem(streamKey string) (RedisStream, bool) {

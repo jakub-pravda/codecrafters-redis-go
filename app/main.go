@@ -9,6 +9,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/app/internal/command"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/eventloop"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/streamstore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
@@ -19,6 +20,10 @@ var _ = os.Exit
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	utils.Log("Logs from your program will appear here!")
+
+	// Init stream store
+	streamstore.InitStreamStore()
+	go streamstore.StreamStoreListener()
 
 	// Init event loop
 	eventLoop := eventloop.CommandEventLoop{

@@ -285,63 +285,6 @@ func parseXRangeCommand(command *Command) (XRangeCommand, error) {
 	return xRangeCommand, nil
 }
 
-func parseXReadCommand(command *Command) (XReadCommand, error) {
-	if command.CommandType != "XREAD" {
-		return XReadCommand{}, errors.New("Not a XREAD")
-	}
-
-	xReadCommand := XReadCommand{}
-
-	for i, value := range command.CommandValues {
-		upperValue := strings.ToUpper(value)
-
-		switch upperValue {
-		case "BLOCK":
-			if i+1 >= len(command.CommandValues) {
-				return xReadCommand, fmt.Errorf("missing BLOCK value")
-			}
-
-			blockMillis, err := strconv.Atoi(command.CommandValues[i+1])
-			if err != nil {
-				utils.Log(fmt.Sprintf("ERROR (parseXReadCommand) Invalid BLOCK value. Int expected, but got: %s. Error: %v", command.CommandValues[i+1], err))
-				return xReadCommand, err
-			}
-
-			xReadCommand.BlockMillis = blockMillis
-			xReadCommand.IsBlocking = true
-
-		case "STREAMS":
-			streams := command.CommandValues[i+1:]
-			if len(streams)%2 != 0 {
-				err := fmt.Errorf("ERROR (parseXReadCommand) Even number of streams value expected, but got: %d", len(streams))
-				utils.Log(err.Error())
-				return xReadCommand, err
-			}
-
-			// Initialize streams map
-			xReadCommand.Streams = XReadStreams{
-				keysIds: make(map[string]EntryId, len(streams)/2),
-			}
-
-			for j := 0; j < len(streams)/2; j++ {
-				key := streams[j]
-				id := streams[len(streams)/2+j]
-
-				entryId, err := parseXCommandsEntryId(id)
-				if err != nil {
-					utils.Log(fmt.Sprintf("ERROR (parseXReadCommand) Can't parse stream entry id: %s, %v", id, err))
-					return xReadCommand, err
-				}
-
-				utils.Log(fmt.Sprintf("(parseXReadCommand) Stream key: %s, id: %s", key, id))
-				xReadCommand.Streams.keysIds[key] = entryId
-			}
-		}
-	}
-
-	return xReadCommand, nil
-}
-
 func arrayToCommand(array respparser.Array) Command {
 	if len(array.Items) == 0 {
 		// TODO convert type to enum instead string
