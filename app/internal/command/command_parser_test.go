@@ -34,9 +34,11 @@ func sameXReadCommandResults(f *XReadCommand, s *XReadCommand) bool {
 	blocksEqual := f.BlockMillis == s.BlockMillis
 	streamsEqual := true
 
-	for key, value := range f.Streams.keysIds {
-		foundValue, found := s.Streams.keysIds[key]
-		if !found || value != foundValue {
+	for n, _ := range f.Streams {
+		fStream := f.Streams[n]
+		sStream := s.Streams[n]
+
+		if fStream.streamKey != sStream.streamKey || fStream.entryId != sStream.entryId {
 			streamsEqual = false
 			break
 		}
@@ -253,9 +255,10 @@ func TestParseXReadCommand(t *testing.T) {
 				"STREAMS", "stream-key", "1526985054069-1",
 			}},
 			want: XReadCommand{
-				Streams: XReadStreams{
-					keysIds: map[string]EntryId{
-						"stream-key": EntryId{
+				Streams: []XReadStream{
+					XReadStream{
+						streamKey: "stream-key",
+						entryId: EntryId{
 							MillisecondsTime: int64(1526985054069),
 							SequenceNumber:   1,
 						},
@@ -269,13 +272,17 @@ func TestParseXReadCommand(t *testing.T) {
 				"STREAMS", "stream-key-1", "stream-key-2", "0-1", "1-1",
 			}},
 			want: XReadCommand{
-				Streams: XReadStreams{
-					keysIds: map[string]EntryId{
-						"stream-key-1": EntryId{
+				Streams: []XReadStream{
+					XReadStream{
+						streamKey: "stream-key-1",
+						entryId: EntryId{
 							MillisecondsTime: int64(0),
 							SequenceNumber:   1,
 						},
-						"stream-key-2": EntryId{
+					},
+					XReadStream{
+						streamKey: "stream-key-2",
+						entryId: EntryId{
 							MillisecondsTime: int64(1),
 							SequenceNumber:   1,
 						},
@@ -291,9 +298,10 @@ func TestParseXReadCommand(t *testing.T) {
 			}},
 			want: XReadCommand{
 				BlockMillis: 10,
-				Streams: XReadStreams{
-					keysIds: map[string]EntryId{
-						"stream-key": EntryId{
+				Streams: []XReadStream{
+					XReadStream{
+						streamKey: "stream-key",
+						entryId: EntryId{
 							MillisecondsTime: int64(0),
 							SequenceNumber:   1,
 						},

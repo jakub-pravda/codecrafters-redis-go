@@ -3,7 +3,7 @@ package eventloop
 import "sync"
 
 type Task struct {
-	MainTask   func() // main taks to execute
+	MainTask   func() // main task to execute
 	Callback   func() // optional callback function
 	IsBlocking bool   // flag to determine if a task is blocking or not
 }
@@ -11,7 +11,7 @@ type Task struct {
 type CommandEventLoop struct {
 	MainTask     chan Task // channel to hold commands to be processed
 	CommandQueue chan Task // channel to hold calback tasks
-	Stop         chan bool // channel to inidicate the event loop to stop
+	Stop         chan bool // channel to indicate the event loop to stop
 }
 
 func Add(eventLoop *CommandEventLoop, task *Task) {
@@ -64,7 +64,7 @@ func InitEventLoop(eventLoop *CommandEventLoop, workerPoolSize int) *sync.WaitGr
 					task.MainTask()
 				}
 			case task := <-eventLoop.CommandQueue:
-				// ececute callback task
+				// execute callback task
 				task.MainTask()
 			case stop := <-eventLoop.Stop:
 				if stop {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"math"
@@ -12,7 +13,10 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
-type StreamStore map[string][]RedisStream
+type StreamStore struct {
+	mu    sync.RWMutex
+	store map[string][]RedisStream
+}
 
 var streamStoreChannel chan RedisStream
 var notificationChannel chan RedisStream
@@ -20,7 +24,9 @@ var streamStore StreamStore
 
 func InitStreamStore() {
 	streamStoreChannel = make(chan RedisStream)
-	streamStore = make(StreamStore)
+	streamStore = StreamStore{
+		store: map[string][]RedisStream{},
+	}
 }
 
 func StreamStoreListener() {
@@ -31,8 +37,10 @@ func StreamStoreListener() {
 		for {
 			value, chanOk := <-streamStoreChannel
 
-			if notificationChannel != nil {
-				notificationChannel <- value
+			select {
+			case notificationChannel <- value:
+			default:
+				// no listeners, skip notification
 			}
 
 			if !chanOk {
@@ -40,18 +48,20 @@ func StreamStoreListener() {
 				break
 			}
 
-			stream, found := streamStore[value.StreamKey]
+			streamStore.mu.Lock()
+			stream, found := streamStore.store[value.StreamKey]
 
 			if found {
 				// update existing strem
 				utils.Log(fmt.Sprintf("(StreamStoreListener) Append: StreamKey = %s - appending to an existing stream", value.StreamKey))
 				appendStream := append(stream, value)
-				streamStore[value.StreamKey] = appendStream
+				streamStore.store[value.StreamKey] = appendStream
 			} else {
 				// create new stream
 				utils.Log(fmt.Sprintf("(StreamStoreListener) Append: StreamKey = %s - creating a new stream", value.StreamKey))
-				streamStore[value.StreamKey] = []RedisStream{value}
+				streamStore.store[value.StreamKey] = []RedisStream{value}
 			}
+			streamStore.mu.Unlock()
 		}
 	}
 	utils.Log("(StreamStoreListener) Closing listener")
@@ -116,7 +126,10 @@ func (s RedisStream) StreamId() string {
 }
 
 func GetTopItem(streamKey string) (RedisStream, bool) {
-	stream, found := streamStore[streamKey]
+	streamStore.mu.RLock()
+	defer streamStore.mu.RUnlock()
+
+	stream, found := streamStore.store[streamKey]
 	utils.Log(fmt.Sprintf("(StreamStoreValue) Get: StreamKey = %s, found = %t", streamKey, found))
 	if (!found) || len(stream) < 1 {
 		return RedisStream{}, false
@@ -126,8 +139,11 @@ func GetTopItem(streamKey string) (RedisStream, bool) {
 }
 
 func GetItems(streamKey string, startMillis int64, endMillis int64, startSequenceNumber int, endSequenceNumber int) ([]RedisStream, bool) {
+	streamStore.mu.RLock()
+	defer streamStore.mu.RUnlock()
+
 	var result []RedisStream
-	stream, found := streamStore[streamKey]
+	stream, found := streamStore.store[streamKey]
 	utils.Log(fmt.Sprintf("(StreamStoreValue) GetItems: StreamKey = %s, found = %t", streamKey, found))
 	if (!found) || len(stream) < 1 {
 		return result, false
@@ -167,8 +183,11 @@ func GetItems(streamKey string, startMillis int64, endMillis int64, startSequenc
 }
 
 func GetItemsByFilter(streamKey string, filter func(i []RedisStream) []RedisStream) ([]RedisStream, bool) {
+	streamStore.mu.RLock()
+	defer streamStore.mu.RUnlock()
+
 	var result []RedisStream
-	stream, found := streamStore[streamKey]
+	stream, found := streamStore.store[streamKey]
 	utils.Log(fmt.Sprintf("(StreamStoreValue)(GetItemsByFilter) GetItems: StreamKey = %s, found = %t", streamKey, found))
 	if (!found) || len(stream) < 1 {
 		return result, false

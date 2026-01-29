@@ -76,8 +76,10 @@ type EntryId struct {
 	StreamTopItems   bool // remark: the special '$' arg
 }
 
-type XReadStreams struct {
-	keysIds map[string]EntryId
+type XReadStream struct {
+	streamKey string
+	entryId   EntryId
+	//keysIds map[string]EntryId
 }
 
 func ErrorResponse(e error) CommandResponse {

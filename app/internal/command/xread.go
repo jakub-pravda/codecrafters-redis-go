@@ -14,7 +14,7 @@ import (
 )
 
 type XReadCommand struct {
-	Streams     XReadStreams
+	Streams     []XReadStream
 	BlockMillis int
 	IsBlocking  bool
 }
@@ -23,7 +23,11 @@ func (c XReadCommand) Process() (respparser.RespData, error) {
 	utils.Log("(XReadCommand) Processing XRead command")
 	streams := []respparser.RespData{}
 
-	for streamKey, entryId := range c.Streams.keysIds {
+	for _, stream := range c.Streams {
+
+		entryId := stream.entryId
+		streamKey := stream.streamKey
+		utils.Log(fmt.Sprintf("(XReadCommand) JPR STREAM %s", streamKey))
 
 		// Create stream filter for this use case
 		streamFilter := func(stream streamstore.RedisStream) bool {
@@ -147,11 +151,6 @@ func parseXReadCommand(command *Command) (XReadCommand, error) {
 				return xReadCommand, err
 			}
 
-			// Initialize streams map
-			xReadCommand.Streams = XReadStreams{
-				keysIds: make(map[string]EntryId, len(streams)/2),
-			}
-
 			for j := 0; j < len(streams)/2; j++ {
 				key := streams[j]
 				id := streams[len(streams)/2+j]
@@ -160,7 +159,11 @@ func parseXReadCommand(command *Command) (XReadCommand, error) {
 				if id == "$" {
 					// stream new received items only
 					entryId := EntryId{StreamTopItems: true}
-					xReadCommand.Streams.keysIds[key] = entryId
+					readStream := XReadStream{
+						entryId:   entryId,
+						streamKey: key,
+					}
+					xReadCommand.Streams = append(xReadCommand.Streams, readStream)
 				} else {
 					// parse entry id
 					entryId, err := parseXCommandsEntryId(id)
@@ -168,9 +171,13 @@ func parseXReadCommand(command *Command) (XReadCommand, error) {
 						utils.Log(fmt.Sprintf("ERROR (parseXReadCommand) Can't parse stream entry id: %s, %v", id, err))
 						return xReadCommand, err
 					}
+					readStream := XReadStream{
+						entryId:   entryId,
+						streamKey: key,
+					}
 
 					utils.Log(fmt.Sprintf("(parseXReadCommand) Stream key: %s, id: %s", key, id))
-					xReadCommand.Streams.keysIds[key] = entryId
+					xReadCommand.Streams = append(xReadCommand.Streams, readStream)
 				}
 			}
 		}

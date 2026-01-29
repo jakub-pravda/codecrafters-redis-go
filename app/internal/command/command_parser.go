@@ -300,9 +300,9 @@ func arrayToCommand(array respparser.Array) Command {
 		}
 	} else {
 		commandType := strings.ToUpper(array.Items[0].String())
-		commandValues := make([]string, 0)
-		for _, content := range array.Items[1:] {
-			commandValues = append(commandValues, content.String())
+		commandValues := make([]string, len(array.Items)-1)
+		for n, content := range array.Items[1:] {
+			commandValues[n] = content.String()
 		}
 		return Command{
 			CommandType:   commandType,
@@ -337,9 +337,9 @@ func GetCommandHandler(command *Command) (CommandHandler[string], error) {
 func ParseCommand(r *bufio.Reader) (*Command, error) {
 	// A client sends the Redis server an array consisting of only bulk strings.
 	// command example *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
-	arrayElements, error := respparser.DeserializeArray(r)
-	if error != nil {
-		return nil, error
+	arrayElements, err := respparser.DeserializeArray(r)
+	if err != nil {
+		return nil, err
 	}
 
 	command := arrayToCommand(arrayElements)

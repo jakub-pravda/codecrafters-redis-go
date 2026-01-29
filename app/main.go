@@ -13,10 +13,6 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
-// Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
-var _ = net.Listen
-var _ = os.Exit
-
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	utils.Log("Logs from your program will appear here!")
@@ -89,11 +85,11 @@ func handleConnection(conn net.Conn, eventLoop *eventloop.CommandEventLoop) {
 		commandReader := bufio.NewReader(conn)
 		commandDataType, err := commandReader.Peek(1)
 		if err != nil {
-			utils.Log("(Connection handler) Can't read data from incomming connection")
+			utils.Log("(Connection handler) Can't read data from incoming connection")
 			break
 		}
 
-		utils.Log(fmt.Sprintf("(Connection handler) Recieved new data with type: %v", commandDataType))
+		utils.Log(fmt.Sprintf("(Connection handler) Received new data with type: %v", commandDataType))
 
 		eventloop.Add(eventLoop, &eventloop.Task{
 			// TODO split command processing and client write

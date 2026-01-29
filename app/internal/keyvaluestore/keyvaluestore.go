@@ -2,14 +2,20 @@ package keyvaluestore
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
 
-type KeyStore map[string]KeyStoreValue
+type KeyStore struct {
+	mu    sync.RWMutex
+	store map[string]KeyStoreValue
+}
 
-var keyStore = make(KeyStore)
+var keyStore = KeyStore{
+	store: map[string]KeyStoreValue{},
+}
 
 type KeyStoreValue struct {
 	Key              string
@@ -19,16 +25,23 @@ type KeyStoreValue struct {
 }
 
 func Append(value KeyStoreValue) {
+	keyStore.mu.Lock()
+	defer keyStore.mu.Unlock()
+
 	utils.Log(fmt.Sprintf("(KeyValueStore) Append: key = %s, value = %s", value.Key, value.Value))
-	keyStore[value.Key] = value
+	keyStore.store[value.Key] = value
 }
 
 func Get(key string) (KeyStoreValue, bool) {
-	get, found := keyStore[key]
+	keyStore.mu.RLock()
+	get, found := keyStore.store[key]
+	keyStore.mu.RUnlock()
 
 	if get.Expire != nil && time.Now().After(*get.Expire) {
+		keyStore.mu.Lock()
 		utils.Log(fmt.Sprintf("(KeyValueStore) Get key = %s expired", key))
-		delete(keyStore, key)
+		delete(keyStore.store, key)
+		keyStore.mu.Unlock()
 		return KeyStoreValue{}, false
 	}
 
