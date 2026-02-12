@@ -3,8 +3,8 @@ package command
 import (
 	"fmt"
 
-	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
 )
 
 type Command struct {
@@ -13,7 +13,7 @@ type Command struct {
 }
 
 type CommandContext struct {
-	KeyStore *keyvaluestore.KeyStore
+	KeyStore *store.KeyStore
 }
 
 type CommandResponse struct {

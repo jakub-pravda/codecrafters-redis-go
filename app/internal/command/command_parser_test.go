@@ -1,10 +1,29 @@
 package command
 
 import (
+	"fmt"
 	"maps"
 	"math"
 	"testing"
+
+	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
+
+func IsEqualSlice[T comparable](a []T, b []T) bool {
+	if len(a) != len(b) {
+		utils.Log(fmt.Sprintf("(IsEqualSlice) Not equal slices len: %d vs %d", len(a), len(b)))
+		return false
+	}
+
+	for n, _ := range a {
+		if a[n] != b[n] {
+			utils.Log(fmt.Sprintf("(IsEqualSlice) Not equal slices elem: %v vs %v", a[n], b[n]))
+			return false
+		}
+	}
+
+	return true
+}
 
 func sameXAddCommandResults(f *XAddCommand, s *XAddCommand) bool {
 	// compare simple values

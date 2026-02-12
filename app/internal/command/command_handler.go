@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codecrafters-io/redis-starter-go/app/internal/keyvaluestore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/respparser"
+	"github.com/codecrafters-io/redis-starter-go/app/internal/store"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/streamstore"
 	"github.com/codecrafters-io/redis-starter-go/app/internal/utils"
 )
@@ -32,7 +32,7 @@ func (c PingCommand) Process() (respparser.RespData, error) {
 }
 
 func (c GetCommand) Process() (respparser.RespData, error) {
-	get, found := keyvaluestore.Get(c.Key)
+	get, found := store.Get(c.Key)
 	var resp respparser.BulkString
 
 	if found {
@@ -49,7 +49,7 @@ func (c GetCommand) Process() (respparser.RespData, error) {
 }
 
 func (c SetCommand) Process() (respparser.RespData, error) {
-	keyStoreValue := keyvaluestore.KeyStoreValue{
+	keyStoreValue := store.KeyStoreValue{
 		InsertedDatetime: time.Now(),
 	}
 
@@ -59,13 +59,13 @@ func (c SetCommand) Process() (respparser.RespData, error) {
 	keyStoreValue.Value = c.Value
 	keyStoreValue.Expire = &expires
 
-	keyvaluestore.Append(keyStoreValue)
+	store.Append(keyStoreValue)
 	return okResponse, nil
 }
 
 func (c TypeCommand) Process() (respparser.RespData, error) {
 
-	_, foundInKv := keyvaluestore.Get(c.Key)
+	_, foundInKv := store.Get(c.Key)
 	if foundInKv {
 		resp := respparser.SimpleString{
 			Value: "string",

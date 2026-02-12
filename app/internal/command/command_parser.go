@@ -329,6 +329,8 @@ func GetCommandHandler(command *Command) (CommandHandler[string], error) {
 		return parseXRangeCommand(command)
 	case "XREAD":
 		return parseXReadCommand(command)
+	case "RPUSH":
+		return parseRPushCommand(command)
 	default:
 		return PingCommand{}, errors.ErrUnsupported
 	}

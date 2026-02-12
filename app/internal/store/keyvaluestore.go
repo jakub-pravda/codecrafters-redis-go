@@ -1,4 +1,4 @@
-package keyvaluestore
+package store
 
 import (
 	"fmt"
