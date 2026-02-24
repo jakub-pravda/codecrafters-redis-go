@@ -46,5 +46,13 @@ func (ls *ListStore) Append(list ListStoreValue) int {
 }
 
 func (ls *ListStore) Get(key string) (ListStoreValue, bool) {
-	return ListStoreValue{}, false
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+
+	list, found := ls.store[key]
+	listStore := ListStoreValue{
+		Key:    key,
+		Values: list,
+	}
+	return listStore, found
 }
